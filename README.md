@@ -1,5 +1,7 @@
 # 机器学习实战课
 
+**在线访问（手机也能打开）：https://patience-star.github.io/ml-practice-course/**
+
 三个贴合真实业务的 scikit-learn 实战项目，做成一个可交互的教学网站：
 
 | 项目 | 任务 | 业务场景 | 重点 |
