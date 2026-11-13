@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>机器学习实战课</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="home">
+<header class="top"><div class="top-in">
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="8" width="20" height="6" rx="3" style="fill:var(--pipe)"/><circle cx="16" cy="18" r="2.6" style="fill:var(--leak)"/></svg>机器学习实战课</a>
+  <nav><a href="index.html" aria-current="page">总览</a><a href="regression.html">回归·房价</a><a href="classification.html">分类·流失</a><a href="clustering.html">聚类·分群</a></nav>
+  <span class="meter" id="badge-mini"></span>
+</div></header>
+
+<div class="wrap">
+<section class="home-hero">
+  <span class="eyebrow">scikit-learn 实战 · 三个真实业务项目</span>
+  <h1>机器学习实战课：从一份脏数据，走到一个上线决策</h1>
+  <p class="lede">房价估价、会员流失、客户分群。每个项目都从业务方的一句话开始，经过同样的八个关口，最后变成老板能拍板的结论。所有数字、图表和代码，都由真实的 scikit-learn 跑出来。</p>
+  <div><span class="motto">先切分，后 fit；一切 fit 都进 Pipeline；<span>测试集只看一次。</span></span></div>
+</section>
+
+<section class="home-sec">
+  <h2>一条管道，八个关口</h2>
+  <p>scikit-learn 把"预处理 + 模型"叫作 Pipeline，也就是管道。数据从左边流进来，变成右边的决策。橙红色的水滴是漏点：数据泄漏最容易发生的地方。点任意一个关口看看。</p>
+  <div class="flow" id="flow"></div>
+  <div class="flow-detail" id="flow-detail"></div>
+</section>
+
+<section class="home-sec">
+  <h2>三个项目，三类任务</h2>
+  <p>建议按顺序学：回归项目把"时间"讲透，分类项目把"业务决策"讲透，聚类项目讲没有标签时怎么判断好坏。每页的进度保存在你的浏览器里。</p>
+  <div class="projects">
+    <a class="proj" href="regression.html" style="--pc:var(--reg)">
+      <span class="eyebrow">项目 A · 回归</span><h3>二手房一键估价</h3>
+      <p>产品经理要在 App 上线估价功能。房价会涨会跌，数据由几十家中介录入。</p>
+      <ul><li>单位错误、占位符、重复挂牌</li><li>时间切分与 TimeSeriesSplit</li><li>log 目标、TargetEncoder</li><li>模型过期与重训</li></ul>
+      <div class="prog"><i data-prog="reg"></i></div><span class="go" data-prog-text="reg">开始学习 →</span>
+    </a>
+    <a class="proj" href="classification.html" style="--pc:var(--clf)">
+      <span class="eyebrow">项目 B · 分类</span><h3>会员流失预警</h3>
+      <p>运营总监有一笔挽留预算，想知道这个月该给谁打电话。</p>
+      <ul><li>准确率陷阱与类别不平衡</li><li>目标泄漏字段</li><li>GridSearchCV 与模型选择</li><li>用利润决定阈值</li></ul>
+      <div class="prog"><i data-prog="clf"></i></div><span class="go" data-prog-text="clf">开始学习 →</span>
+    </a>
+    <a class="proj" href="clustering.html" style="--pc:var(--clu)">
+      <span class="eyebrow">项目 C · 聚类</span><h3>电商客户分群</h3>
+      <p>市场部想把双十一预算按客户类型分配，但手里只有订单流水。</p>
+      <ul><li>订单表 → 客户表（RFM）</li><li>log + 标准化、异常账号</li><li>肘部法、轮廓系数、稳定性</li><li>用未来行为验证分群</li></ul>
+      <div class="prog"><i data-prog="clu"></i></div><span class="go" data-prog-text="clu">开始学习 →</span>
+    </a>
+  </div>
+</section>
+
+<section class="home-sec museum">
+  <h2>泄漏博物馆</h2>
+  <p>数据泄漏是这门课的头号反派：模型在训练时偷看到了上线时拿不到的信息，线下分数漂亮，上线就露馅。三个项目里一共布置了 14 个漏点，每个都有"泄漏版 vs 正确版"的真实对比。全部排查完，你会拿到一枚徽章。</p>
+  <div><span class="badge off" id="badge">泄漏猎人 · 0 / 14</span></div>
+  <div class="tbl"><table>
+    <thead><tr><th>漏点</th><th>发生在</th><th>一句话</th><th>状态</th></tr></thead>
+    <tbody id="museum"></tbody>
+  </table></div>
+</section>
+
+<section class="home-sec">
+  <h2>热身：这是哪类任务？</h2>
+  <p>机器学习项目的第一步，是把业务问题翻译成正确的任务类型。</p>
+  <div class="split">
+    <div class="quiz" data-answer="0" data-id="home-1"><p class="q">预测下个月每家门店的销售额</p><div class="opts"><button>回归</button><button>分类</button><button>聚类</button></div><p class="explain">要预测的是一个连续的数。注意它和房价一样有时间顺序，要按时间切分。</p></div>
+    <div class="quiz" data-answer="1" data-id="home-2"><p class="q">判断一笔信用卡交易是不是盗刷</p><div class="opts"><button>回归</button><button>分类</button><button>聚类</button></div><p class="explain">二分类，而且盗刷极少，类别严重不平衡，准确率陷阱比流失项目更严重。</p></div>
+    <div class="quiz" data-answer="2" data-id="home-3"><p class="q">没有任何标签，把 10 万篇用户评论按话题分组</p><div class="opts"><button>回归</button><button>分类</button><button>聚类</button></div><p class="explain">没有标签、要找出"自然的分组"，就是聚类。</p></div>
+    <div class="quiz" data-answer="1" data-id="home-4"><p class="q">根据历史数据，判断新来的简历应该进入"技术岗 / 销售岗 / 职能岗"哪个池子</p><div class="opts"><button>回归</button><button>分类</button><button>聚类</button></div><p class="explain">有历史标签的多分类。另外要警惕：历史数据里的偏见会被模型学走。</p></div>
+  </div>
+</section>
+
+<section class="home-sec">
+  <h2>这门课怎么教</h2>
+  <div class="split">
+    <div class="flow-detail"><h3>传统的骨架</h3><ul class="prose">
+      <li>三个项目走完全相同的 8 步流程，流程本身就是知识。</li>
+      <li>每一步固定结构：业务方的话 → 为什么 → 代码 → 结果 → 常见坑 → 小测验 → 官方文档。</li>
+      <li>代码就是真正跑出结果的代码，可以复制到自己的 Python 里运行。</li>
+      <li>每个项目末尾有复盘清单和课后作业（附原始脏数据下载）。</li>
+    </ul></div>
+    <div class="flow-detail"><h3>新的玩法</h3><ul class="prose">
+      <li><b>剧情</b>：你是新入职的数据科学家，三位业务方会给你提需求、挑毛病。</li>
+      <li><b>先猜后看</b>：关键数字先锁住，你先下注再揭晓。猜错的地方记得最牢。</li>
+      <li><b>找茬</b>：在原始数据里亲手点出脏数据，还有陷阱题。</li>
+      <li><b>泄漏版 vs 正确版</b>：每个漏点都能一键切换，真实对比分数。</li>
+      <li><b>实验台</b>：拖动阈值、深度、K 值，背后都是真实的 sklearn 结果。</li>
+      <li><b>向老板汇报</b>：从一堆说法里挑出能对老板讲的结论。</li>
+    </ul></div>
+  </div>
+</section>
+
+<section class="home-sec">
+  <h2>项目文件与运行方式</h2>
+  <p>整个网站由一条命令生成。改了数据规律或模型代码，重新运行即可，网页上的数字和代码会自动同步。如果某个教学结论（比如"泄漏版分数虚高"）不再成立，构建会直接报错。</p>
+  <div class="code"><div class="code-bar"><span>项目结构</span></div><pre><code>完整机器学习项目介绍/
+├── build.py               一键重建：生成数据 → 跑三个项目 → 导出网页数据
+├── ml/
+│   ├── make_data.py       生成三份带"坑"的仿真业务数据（固定随机种子）
+│   ├── regression.py      项目 A 完整流程（用 # %% step:xxx 分段，分段即网页上的代码块）
+│   ├── classification.py  项目 B 完整流程
+│   ├── clustering.py      项目 C 完整流程
+│   └── common.py          导出工具
+├── site/                  网站本体，双击 index.html 即可离线打开
+│   ├── assets/            样式与交互组件（无第三方依赖）
+│   └── data/              原始脏数据 CSV + 预计算结果 *.js
+└── models/                训练好的整条 Pipeline（joblib）</code></pre></div>
+  <div class="code"><div class="code-bar"><span>重新生成全部内容（约 2 分钟）</span></div><pre><code>pip install scikit-learn pandas numpy joblib
+python build.py</code></pre></div>
+</section>
+
+<footer class="foot">
+  <span>数据为按真实业务规律生成的仿真数据，公司与人物均为虚构。流程参考 scikit-learn 官方文档（Getting Started、User Guide、Common pitfalls）。</span>
+  <span>运行环境：scikit-learn 1.9 · pandas 3.0 · Python 3.14。</span>
+</footer>
+</div>
+
+<script src="assets/app.js"></script>
+<script>
+(() => {
+  const { $, $$, esc, store, leaks } = ML;
+  const SK = 'https://scikit-learn.org/stable/';
+  const STEPS = [
+    { n: '业务理解', what: '把业务问题翻译成任务类型、评估指标和基线；确定"预测时点"。', why: '解错题比解不好题更致命。业务方说的"准确率"往往不是他真正关心的东西。', api: '—', doc: ['选择估计器', 'machine_learning_map.html'], leak: '预测时点：哪些信息在预测那一刻还不存在？', proj: ['房价：估价发生在成交前', '流失：月初打分，用利润定阈值', '分群：快照日 + 可执行的策略数'] },
+    { n: '数据体检', what: '看类型、分布、缺失、取值写法和时间范围。', why: '每个异常都对应下一步的一条清洗规则。', api: 'pandas：dtypes / describe / value_counts', doc: ['Getting Started', 'getting_started.html'], leak: '', proj: ['面积 9999、建成年份 0', '金额被读成字符串', '数据里有"未来"订单'] },
+    { n: '数据清洗', what: '只做规则型清洗：去重、统一写法、单位换算、删除泄漏字段。', why: '规则型清洗不从数据里学参数，可以在切分前做，上线时原样复用。', api: 'pandas；把清洗写成函数', doc: ['Common pitfalls', 'common_pitfalls.html'], leak: '目标泄漏：由结果反推出来的字段。', proj: ['单价、契税', '挽留专员通话次数', '退货冲抵、剔除批发商'] },
+    { n: '数据切分', what: '尽早切出测试集并封存；按需分层或按时间切分。', why: '测试集扮演"上线后的新数据"，被看过就不再新。', api: 'train_test_split · TimeSeriesSplit', doc: ['交叉验证', 'modules/cross_validation.html'], leak: '重复样本跨集合、随机切分造成时间穿越。', proj: ['按成交日期切分', 'stratify 分层', '快照日之后留作验证'] },
+    { n: '预处理', what: '数值填补与缩放、类别编码、目标变换，全部放进 Pipeline。', why: 'Pipeline 保证所有"学习型"处理只在训练数据（或训练折）上 fit。', api: 'ColumnTransformer · Pipeline · SimpleImputer · OneHotEncoder · TargetEncoder', doc: ['Pipeline 与组合', 'modules/compose.html'], leak: '先在全量数据上预处理或选特征，再做验证。', proj: ['log 目标、目标编码', 'SelectKBest 随机数实验', 'log + 标准化'] },
+    { n: '建模', what: '先立 Dummy 基线，再从简单模型到复杂模型。', why: '没有基线，任何分数都无法判断好坏；复杂模型不一定更好。', api: 'DummyRegressor / DummyClassifier · Ridge · LogisticRegression · HistGradientBoosting · KMeans', doc: ['Dummy 基线', 'modules/model_evaluation.html#dummy-estimators'], leak: '', proj: ['深度与过拟合', '准确率陷阱', '选 K 与稳定性'] },
+    { n: '评估调参', what: '交叉验证比较模型、搜索超参数，最后打开一次测试集。', why: '用交叉验证做决定，测试集的分数才是无偏的。', api: 'cross_validate · GridSearchCV · validation_curve · metrics', doc: ['超参数搜索', 'modules/grid_search.html'], leak: '反复用测试集挑模型，分数系统性虚高。', proj: ['±10% 业务验收', 'AUC、PR 曲线', '用未来复购验证分群'] },
+    { n: '解释与上线', what: '解释模型、做业务决策、保存整条 Pipeline、上线监控与重训。', why: '模型不是一次性交付物：成本会变，市场会变。', api: 'permutation_importance · joblib / skops', doc: ['模型持久化', 'model_persistence.html'], leak: '训练与线上口径不一致；模型过期。', proj: ['全量重训、偏差监控', '利润最优阈值', '新客户 predict 归群'] },
+  ];
+  const flow = $('#flow'), det = $('#flow-detail');
+  flow.innerHTML = STEPS.map((s, i) => `<button data-i="${i}"><span class="joint">${i}</span>${s.leak ? '<i class="drip"></i>' : ''}<span>${s.n}</span></button>`).join('');
+  const show = i => {
+    const s = STEPS[i];
+    $$('button', flow).forEach(b => b.classList.toggle('on', +b.dataset.i === i));
+    det.innerHTML = `<h3>${i} · ${s.n}</h3><div class="cols">
+      <div><b>做什么</b>${esc(s.what)}</div><div><b>为什么</b>${esc(s.why)}</div>
+      <div><b>scikit-learn</b><code>${esc(s.api)}</code><br><a href="${SK + s.doc[1]}" target="_blank" rel="noopener">官方文档：${esc(s.doc[0])}</a></div>
+      <div><b>漏点</b>${s.leak ? `<span style="color:var(--leak)">${esc(s.leak)}</span>` : '本步没有典型漏点'}</div>
+      <div><b>三个项目里</b><a href="regression.html#s${i}">房价</a>：${esc(s.proj[0])}<br><a href="classification.html#s${i}">流失</a>：${esc(s.proj[1])}<br><a href="clustering.html#s${i}">分群</a>：${esc(s.proj[2])}</div></div>`;
+  };
+  flow.onclick = e => { const b = e.target.closest('button'); if (b) show(+b.dataset.i); };
+  show(2);
+
+  const LEAKS = [
+    ['reg-time', '预测时点', 'regression.html#s0', '回归 · 第 0 步', '估价时还不存在的字段，一个都不能用。'],
+    ['reg-target', '目标泄漏', 'regression.html#s2', '回归 · 第 2 步', '单价 = 成交价 ÷ 面积，R² 虚高到接近 1。'],
+    ['reg-dup', '重复样本', 'regression.html#s3', '回归 · 第 3 步', '重复挂牌的房子落在训练和测试两边，等于背答案。'],
+    ['reg-split', '时间穿越', 'regression.html#s3', '回归 · 第 3 步', '随机切分掩盖了下跌市场里的系统性高估。'],
+    ['reg-te', '目标编码', 'regression.html#s4', '回归 · 第 4 步', '小区均价算进了自己的价格，线下好看、上线无效。'],
+    ['reg-decay', '模型过期', 'regression.html#s7', '回归 · 第 7 步', '用旧行情训练的模型，在下跌市场里系统性高估。'],
+    ['clf-time', '预测时点', 'classification.html#s0', '分类 · 第 0 步', '月初打分时，注销申请还没发生。'],
+    ['clf-target', '目标泄漏', 'classification.html#s2', '分类 · 第 2 步', '挽留电话次数让线下 AUC 接近完美，上线却不如老实模型。'],
+    ['clf-noise', '先选特征再验证', 'classification.html#s4', '分类 · 第 4 步', '在纯随机数上"做出"高准确率（官方文档案例）。'],
+    ['clf-test', '反复看测试集', 'classification.html#s6', '分类 · 第 6 步', '用测试集挑出来的冠军，汇报分数系统性偏高。'],
+    ['clf-serving', '线上口径不一致', 'classification.html#s7', '分类 · 第 7 步', '清洗逻辑和预处理参数线上线下不一致。'],
+    ['clu-snapshot', '快照日', 'clustering.html#s0', '聚类 · 第 0 步', '分群特征只能用快照日之前的数据。'],
+    ['clu-window', '时间窗口', 'clustering.html#s6', '聚类 · 第 6 步', '混进未来订单，制造"沉睡客户无人回流"的假象。'],
+    ['clu-serving', '重跑口径', 'clustering.html#s7', '聚类 · 第 7 步', '对单个新客户重新 fit、群编号乱跳。'],
+  ];
+  $('#museum').innerHTML = LEAKS.map(([id, name, href, where, line]) => `<tr><td><a href="${href}">${esc(name)}</a></td><td>${esc(where)}</td><td>${esc(line)}</td><td>${leaks[id] ? '<span class="verdict good">已排查</span>' : '<span class="hint">待排查</span>'}</td></tr>`).join('');
+  const seen = LEAKS.filter(l => leaks[l[0]]).length;
+  $('#badge').textContent = `泄漏猎人 · ${seen} / ${LEAKS.length}`;
+  $('#badge').classList.toggle('off', seen < LEAKS.length);
+  $('#badge-mini').textContent = `已排查漏点 ${seen}/${LEAKS.length}`;
+
+  ['reg', 'clf', 'clu'].forEach(p => {
+    const g = store.get(p, { quiz: {} }), done = Object.keys(g.quiz || {}).length, total = g.total || 0;
+    if (total) {
+      $(`[data-prog="${p}"]`).style.width = `${Math.min(100, (done / total) * 100)}%`;
+      $(`[data-prog-text="${p}"]`).textContent = done >= total ? '已完成，再看一遍 →' : `已完成 ${done} / ${total} 个测验，继续 →`;
+    }
+  });
+
+  ML.init();
+})();
+</script>
+</body>
+</html>

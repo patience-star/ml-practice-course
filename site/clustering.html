@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>电商客户分群 · 机器学习实战课</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="clu">
+<header class="top"><div class="top-in">
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="8" width="20" height="6" rx="3" style="fill:var(--pipe)"/><circle cx="16" cy="18" r="2.6" style="fill:var(--leak)"/></svg>机器学习实战课</a>
+  <nav><a href="index.html">总览</a><a href="regression.html">回归·房价</a><a href="classification.html">分类·流失</a><a href="clustering.html" aria-current="page">聚类·分群</a></nav>
+  <span class="meter"></span>
+</div></header>
+
+<div class="wrap layout">
+<aside class="rail" id="rail" aria-label="步骤导航"></aside>
+<main>
+
+<section class="hero">
+  <span class="eyebrow">项目 C · 聚类 · 星海优选电商</span>
+  <h1>电商客户分群：没有标准答案时，怎么判断分得好不好？</h1>
+  <p class="lede">一份 <b data-v="CLU.n_orders" data-f="int"></b> 行的订单流水，没有任何标签。市场部想按客户类型分配双十一预算。聚类最难的不是调用 <code>KMeans</code>，而是从订单表造出"客户"，以及证明分出来的群有业务意义。</p>
+  <div class="facts">
+    <span>原始数据是订单，不是客户</span><span>无标签</span><span>量纲差异巨大</span><span>混有"未来"订单</span>
+    <span>KMeans · silhouette_score · PCA</span>
+  </div>
+</section>
+
+<!-- ============================== 0 ============================== -->
+<section class="step" id="s0" data-step="0" data-title="业务理解">
+  <header class="step-head"><span class="step-no">STEP 0</span><h2>业务理解：没有标签，"好"由谁来定义？</h2></header>
+  <div class="npc"><div class="ava">唐</div><div class="bubble"><div class="who">市场部经理 · 唐果</div>双十一预算要分给不同的客户群，但我们连"客户有哪几类"都说不清。能不能把老客户分分组？每组我们会定一套营销策略。</div></div>
+  <div class="npc me"><div class="ava">你</div><div class="bubble"><div class="who">你</div>可以。不过聚类没有"正确答案"可以对照，所以我们要先约定：分得好 = 群内相似、群间不同、结果稳定、每个群都能对应一个可执行的策略，并且能被客户未来的行为验证。</div></div>
+  <div class="tbl"><table>
+    <thead><tr><th>业务语言</th><th>机器学习语言</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>客户有哪几类？</td><td>无监督聚类：KMeans</td><td>没有现成的类别标签</td></tr>
+      <tr><td>按什么分？</td><td>客户级特征：RFM + 客单价、首购时间、用券率</td><td>样本是"客户"，必须从订单聚合出来</td></tr>
+      <tr><td>分几类？</td><td>选 K：肘部法 + 轮廓系数 + 业务可解释性</td><td>指标只是参考，最终要落到可执行的策略数</td></tr>
+      <tr><td>分得对不对？</td><td>稳定性检验 + 用"次季度复购率"做外部验证</td><td>好的分群应该能区分客户未来的行为</td></tr>
+    </tbody>
+  </table></div>
+  <aside class="leak" data-id="clu-snapshot">
+    <div class="leak-head"><span class="tag">漏点 1 · 快照日</span><h3>站在 2024-12-31 给客户分群，哪些数据能用？</h3><span class="seen"></span></div>
+    <p class="prose">聚类没有标签，但同样有"预测时点"：分群要在某一天（快照日）做出来，再用来指导之后的营销，并用之后的行为来检验。快照日之后发生的事，都不能进特征。</p>
+    <div class="timeline"><div>2023 年订单</div><div>2024 年订单</div><div>2024 年退货</div><div class="now">快照日 2024-12-31</div><div class="after">2025 年 1–3 月订单</div><div class="after">双十一活动响应</div></div>
+    <div class="classify">
+      <p class="hint">点选<b>不能</b>用来计算分群特征的数据，再点"检查"。</p>
+      <div class="chips">
+        <button class="chip" data-leak="0" data-why="快照日之前">2024 年的订单</button>
+        <button class="chip" data-leak="1" data-why="快照日之后，是用来验证的'未来'">2025 年一季度的订单</button>
+        <button class="chip" data-leak="0" data-why="快照日之前的退货要冲抵">2024 年的退货记录</button>
+        <button class="chip" data-leak="0" data-why="注册时就有">注册渠道</button>
+        <button class="chip" data-leak="1" data-why="营销之后才发生">对本次营销短信的点击</button>
+        <button class="chip" data-leak="0" data-why="快照日之前">历史用券记录</button>
+      </div>
+      <div class="row"><button class="go primary">检查</button><span class="msg"></span></div>
+    </div>
+  </aside>
+  <div class="quiz" data-answer="1">
+    <p class="q">聚类结果"好不好"，最终应该由什么来判断？</p>
+    <div class="opts"><button>轮廓系数越高越好</button><button>指标作参考，关键看是否稳定、可解释、能指导不同的行动</button><button>群越多越精细越好</button></div>
+    <p class="explain">轮廓系数衡量几何上分得开不开，但市场部要的是"每个群一套策略"。一个分得很开、却没法解释或执行的分群，业务价值为零。</p>
+  </div>
+</section>
+
+<!-- ============================== 1 ============================== -->
+<section class="step" id="s1" data-step="1" data-title="数据体检">
+  <header class="step-head"><span class="step-no">STEP 1</span><h2>数据体检：订单流水里的"杂质"</h2></header>
+  <div data-code="CLU.code.load"></div>
+  <div class="kpis">
+    <div class="kpi"><div class="k">订单行数</div><div class="v" data-v="CLU.n_orders" data-f="int"></div></div>
+    <div class="kpi"><div class="k">不同客户 ID</div><div class="v" data-v="CLU.n_ids" data-f="int"></div></div>
+    <div class="kpi"><div class="k">最早订单</div><div class="v" data-v="CLU.date_min"></div></div>
+    <div class="kpi bad"><div class="k">最晚订单</div><div class="v" data-v="CLU.date_max"></div></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">找茬</span><h3>这 12 行订单里藏着哪些问题？</h3></div>
+    <div id="spot"></div>
+  </div>
+  <div class="quiz" data-answer="2">
+    <p class="q">快照日是 2024-12-31，数据里却有 2025 年的订单。最可能的原因是？</p>
+    <div class="opts"><button>系统时钟出错</button><button>测试数据</button><button>导数时没卡截止日期，把之后的订单也导出来了</button></div>
+    <p class="explain">数据仓库是持续更新的，导数脚本只要少写一个日期条件，"未来"就混进来了。这是聚类项目里最隐蔽的泄漏，第 6 步会看到它造成的假象。</p>
+  </div>
+</section>
+
+<!-- ============================== 2 ============================== -->
+<section class="step" id="s2" data-step="2" data-title="数据清洗">
+  <header class="step-head"><span class="step-no">STEP 2</span><h2>数据清洗：每一刀都要有业务理由</h2></header>
+  <div data-code="CLU.code.clean"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">清洗日志</span><h3>原始订单表里的问题</h3></div>
+    <div id="clean-log"></div>
+  </div>
+  <div class="why"><span class="tag">为什么</span><ul class="prose">
+    <li><b>游客订单</b>：没有客户 ID，归不到任何人头上。</li>
+    <li><b>测试账号、批发商</b>：不是我们要分群的 C 端客户。批发商不是"脏数据"，而是另一类业务，应该单独管理。混进来会严重扭曲分群（第 4 步有实验）。</li>
+    <li><b>退货</b>：与原订单冲抵，整单退掉的不算一次购买。</li>
+    <li><b>快照日之后的订单</b>：来自"未来"，留给第 6 步做验证。</li>
+  </ul></div>
+  <div class="quiz" data-answer="0">
+    <p class="q">批发商每单几百件，应该怎么处理？</p>
+    <div class="opts"><button>剔出 C 端分群，交给 B 端团队单独运营</button><button>保留，他们是最有价值的客户</button><button>把数量截断到 3 件</button></div>
+    <p class="explain">他们是真实客户，但属于另一种业务模式。混在一起，聚类会被他们的极端数值主导；截断则是篡改了数据。</p>
+  </div>
+</section>
+
+<!-- ============================== 3 ============================== -->
+<section class="step" id="s3" data-step="3" data-title="特征工程">
+  <header class="step-head"><span class="step-no">STEP 3</span><h2>特征工程：把订单表"折叠"成客户表</h2></header>
+  <div class="why"><span class="tag">为什么</span><p class="prose">我们要分的是客户，不是订单。一个客户可能有几十条订单，必须先聚合成一行。经典的 <b>RFM</b> 模型来自数据库营销：最近一次购买（Recency）、购买频率（Frequency）、消费金额（Monetary）。我们再加上客单价、首购时间、用券率，分别回答"买得贵不贵""是不是新客""是不是只在打折时买"。</p></div>
+  <div data-code="CLU.code.features"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">折叠演示</span><h3>一位客户的 6 笔订单 → 1 行特征</h3></div>
+    <div id="agg-orders"></div>
+    <p class="hint" style="text-align:center">↓ <code>customer_features()</code> ↓</p>
+    <div id="agg-row"></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">量纲</span><h3><span data-v="CLU.n_customers" data-f="int"></span> 位客户的特征范围</h3></div>
+    <div id="feat-desc"></div>
+    <p class="hint">天数是几百，次数是几十，总消费上万，用券率在 0 到 1 之间。KMeans 用的是欧氏距离，谁的数值大，谁就说了算。</p>
+  </div>
+  <div class="quiz" data-answer="1">
+    <p class="q">"最近购买距今天数"应该以哪一天为基准计算？</p>
+    <div class="opts"><button>今天（运行代码的那天）</button><button>固定的快照日 2024-12-31</button><button>每位客户的首购日</button></div>
+    <p class="explain">用"今天"计算，同一份数据下个月再跑一遍，所有人的 Recency 都会变，结果无法复现，也无法和验证期对齐。快照日要写死在代码里。</p>
+  </div>
+</section>
+
+<!-- ============================== 4 ============================== -->
+<section class="step" id="s4" data-step="4" data-title="缩放与异常">
+  <header class="step-head"><span class="step-no">STEP 4</span><h2>预处理：log、标准化，以及异常账号</h2></header>
+  <div data-code="CLU.code.prep"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">对比实验</span><h3>不处理量纲，KMeans 看到的只有"总消费"</h3></div>
+    <div data-code="CLU.code.scale_demo"></div>
+    <div data-tabs id="scale-tabs">
+      <div class="seg"><button data-show="raw" class="bad">原始特征直接聚类</button><button data-show="scaled" class="good">log + 标准化后聚类</button></div>
+      <div data-pane="raw"><div id="scale-raw-plot"></div><div id="scale-raw-tbl"></div><p class="prose"><span class="verdict bad">分群几乎只按消费金额切。</span>四个小群只是"不同档位的大客户"；剩下最大的那个群里，新客（首购很近）和沉睡客户（首购很远）被平均成了一个模糊的数字，用券率高的促销敏感型客户也完全没被识别出来。</p></div>
+      <div data-pane="scaled"><div id="scale-ok-plot"></div><div id="scale-ok-tbl"></div><p class="prose"><span class="verdict good">每个特征都有发言权。</span>各群在新旧、活跃度、价格敏感度上都拉开了差距。</p></div>
+    </div>
+    <p class="hint">散点图用 PCA 把 6 维压到 2 维，只是为了画图；聚类本身在 6 维空间里进行。两个维度一共保留了 <span data-v="CLU.pca.var.0" data-f="pct0"></span> + <span data-v="CLU.pca.var.1" data-f="pct0"></span> 的信息。</p>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">对比实验</span><h3>不剔除异常账号，"高价值客户"的画像会被扭曲</h3></div>
+    <div data-code="CLU.code.outlier_demo"></div>
+    <div id="outlier"></div>
+    <p class="prose">只有 <b data-v="CLU.outlier_demo.n_outliers"></b> 个批发商和测试账号，却把高价值群的平均总消费抬高了好几倍。如果市场部按这个数分配预算，会严重高估高价值群的回报。</p>
+  </div>
+  <div class="quiz" data-answer="2">
+    <p class="q">为什么对"购买次数""总消费""客单价"先取 log 再标准化？</p>
+    <div class="opts"><button>log 让数字变小，KMeans 跑得更快</button><button>sklearn 的 KMeans 要求输入是正数</button><button>它们是长尾分布，少数大客户会主导距离；log 后差异按"倍数"衡量</button></div>
+    <p class="explain">消费 100 元和 1000 元的差距，与 1000 元和 10000 元的差距，在业务上更接近"同等程度"。log 正好表达了这种按倍数的比较。</p>
+  </div>
+</section>
+
+<!-- ============================== 5 ============================== -->
+<section class="step" id="s5" data-step="5" data-title="选 K 与稳定性">
+  <header class="step-head"><span class="step-no">STEP 5</span><h2>建模：分几群？拖动 K 看看</h2></header>
+  <div data-code="CLU.code.choose_k"></div>
+  <div class="lab" id="k-lab">
+    <div class="lab-title"><span class="tag">实验台</span><h3>K = <span id="k-v"></span></h3></div>
+    <input type="range" id="k" min="2" max="8" step="1" value="5" aria-label="簇数 K">
+    <div class="split">
+      <div><p class="hint">客户散点（PCA 二维投影，抽样 800 人）</p><div id="k-plot"></div></div>
+      <div><p class="hint">肘部法（簇内平方和，越低越紧）</p><div id="k-elbow"></div><p class="hint">轮廓系数（越高分得越开）</p><div id="k-sil"></div></div>
+    </div>
+    <div id="k-profile"></div>
+    <p class="hint" id="k-note"></p>
+  </div>
+  <div class="why"><span class="tag">为什么</span><p class="prose">肘部法看"再多分一群，收益还大不大"，轮廓系数看"每个点离自己群近、离别的群远的程度"。本例轮廓系数在 K = <b data-v="CLU.sil_best_k"></b> 时最高，而 5 个群也正好对应 5 套能执行的营销策略：指标和业务指向同一个答案。实际项目里两者常常不一致，这时优先考虑业务可执行性。</p></div>
+  <div data-code="CLU.code.stability"></div>
+  <div class="kpis">
+    <div class="kpi good"><div class="k">10 次抽样重聚类的平均 ARI</div><div class="v" id="ari"></div></div>
+    <div class="kpi"><div class="k">最低一次</div><div class="v" id="ari-min"></div></div>
+  </div>
+  <p class="prose">ARI 接近 1，说明随机拿掉 20% 的客户、换一个随机种子，分群结果几乎不变。不稳定的分群，今天的"高价值客户"下个月可能就换了一批人，策略无从执行。</p>
+  <div class="quiz" data-answer="0">
+    <p class="q">K 从 5 加到 8，簇内平方和继续下降。这说明 K=8 更好吗？</p>
+    <div class="opts"><button>不一定。K 越大簇内平方和必然越小，要看下降是否还明显，并结合轮廓系数和业务</button><button>是的，越小越好</button><button>是的，所以应该一直加到 K = 客户数</button></div>
+    <p class="explain">K 等于客户数时簇内平方和为 0，但毫无意义。肘部法找的是"拐点"，不是最小值。</p>
+  </div>
+</section>
+
+<!-- ============================== 6 ============================== -->
+<section class="step" id="s6" data-step="6" data-title="画像与验证">
+  <header class="step-head"><span class="step-no">STEP 6</span><h2>画像与验证：给每个群起名字，再让未来检验</h2></header>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">起名游戏</span><h3>看画像，给 5 个群起名字</h3></div>
+    <div id="name-tbl"></div>
+    <div class="fields" id="name-in"></div>
+    <div class="row"><button class="primary" id="name-go">揭晓</button><span id="name-msg"></span></div>
+  </div>
+  <div data-code="CLU.code.name"></div>
+  <div class="why"><span class="tag">为什么</span><p class="prose">命名规则要写成代码，不能每次靠人看表格。因为 KMeans 的群编号是随机的：重跑一次，"群 0"可能就从高价值客户变成了沉睡客户。用"最鲜明的特征"认领名字，才能保证每月重跑后名字依然对得上。</p></div>
+  <div data-code="CLU.code.validate"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">外部验证</span><h3>快照日之后一个季度，各群有多少人回来复购？</h3></div>
+    <div id="repurchase"></div>
+    <p class="hint">分群只用了快照日之前的数据，却能清楚地区分出客户未来的行为：高价值客户 <b data-v="CLU.repurchase.高价值客户" data-f="pct0"></b> 复购，沉睡客户只有 <b data-v="CLU.repurchase.沉睡客户" data-f="pct0"></b>。这说明分群抓住了真实的差异。</p>
+  </div>
+  <aside class="leak" data-id="clu-window">
+    <div class="leak-head"><span class="tag">漏点 2 · 时间窗口</span><h3>"沉睡客户一个都没回来"：一个由泄漏制造的结论</h3><span class="seen"></span></div>
+    <p class="prose">如果导数时没卡快照日，2025 年一季度的订单就混进了特征。用同样的流程分群、再看次季度复购：</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">特征里混进了未来订单</button><button data-show="right" class="good">只用快照日之前的订单</button></div>
+      <div data-pane="wrong"><div id="rep-leak"></div><p class="prose"><span class="verdict bad">沉睡客户复购率 <b data-v="CLU.repurchase_leak.沉睡客户" data-f="pct0"></b>。</span>市场部会得出结论："沉睡客户救不回来，唤醒预算全部砍掉。"但这是假象：一季度回来买过的人，因为"最近购买"变近了，全被分进了活跃群。沉睡群里只剩下确定没回来的人。</p></div>
+      <div data-pane="right"><div id="rep-ok"></div><p class="prose"><span class="verdict good">沉睡客户复购率 <b data-v="CLU.repurchase.沉睡客户" data-f="pct0"></b>。</span>不高，但不是零。给其中最有希望的一部分发唤醒券，可能是划算的。</p></div>
+    </div>
+    <div data-code="CLU.code.time_leak"></div>
+  </aside>
+  <div class="quiz" data-answer="1">
+    <p class="q">用次季度复购率验证分群，为什么特征必须只用快照日之前的数据？</p>
+    <div class="opts"><button>为了让代码跑得更快</button><button>否则特征里已经包含了要验证的结果，验证就变成了"自己证明自己"</button><button>sklearn 要求时间有序</button></div>
+    <p class="explain">验证用的"未来"必须是模型没见过的。这和监督学习里测试集要封存是同一个道理。</p>
+  </div>
+</section>
+
+<!-- ============================== 7 ============================== -->
+<section class="step" id="s7" data-step="7" data-title="落地与上线">
+  <header class="step-head"><span class="step-no">STEP 7</span><h2>落地：每个群一套策略，新客户自动归群</h2></header>
+  <div class="tbl"><table>
+    <thead><tr><th>人群</th><th>人数</th><th>次季度复购</th><th>双十一策略</th><th>衡量指标</th></tr></thead>
+    <tbody id="strategy"></tbody>
+  </table></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">新客户归群</span><h3>输入一位客户的特征，看 TA 属于哪个群</h3></div>
+    <div class="fields" id="as-in"></div>
+    <p class="big" id="as-out"></p>
+    <p class="prose" id="as-why"></p>
+    <p class="hint">网页复用了训练好的 log + 标准化参数和 5 个质心，按欧氏距离找最近的质心，这就是 <code>KMeans.predict</code> 做的事。构建时已逐条核对与 sklearn 结果一致。</p>
+  </div>
+  <aside class="leak" data-id="clu-serving">
+    <div class="leak-head"><span class="tag">漏点 3 · 线上口径</span><h3>每月重跑分群时最容易犯的错</h3><span class="seen"></span></div>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">常见错误</button><button data-show="right" class="good">我们的做法</button></div>
+      <div data-pane="wrong"><ul class="prose">
+        <li>给单个新客户归群时，重新对"这一个人" fit 标准化，均值方差全变了。</li>
+        <li>每月重新 KMeans，却沿用上月的"群 0 = 高价值"，名字和人群对不上。</li>
+        <li>线上 SQL 算 Recency 用的是"今天"，训练时用的是快照日。</li>
+      </ul></div>
+      <div data-pane="right"><ul class="prose">
+        <li>日常归群：复用训练好的 <code>pre</code> 和 <code>KMeans</code>，只调用 <code>transform</code> / <code>predict</code>。</li>
+        <li>季度重建：固定快照日重新聚类，用 <code>name_clusters()</code> 规则重新命名，并检查各群人数和画像的变化。</li>
+        <li>特征 SQL 和 Python 共用同一个快照日参数，上线前抽样核对。</li>
+      </ul></div>
+    </div>
+  </aside>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">向老板汇报</span><h3>勾选你会放进汇报里的结论</h3></div>
+    <div class="report">
+      <div class="list">
+        <label data-good="1"><input type="checkbox"><span>客户可以稳定地分成 5 类，每类对应一套策略；分群结果被下一季度的复购行为验证过。<span class="fb">好。讲清了"可执行"和"被验证"。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>轮廓系数 <b data-v="CLU.silhouette.3" data-f="f2"></b>，说明分群准确率 <b data-v="CLU.silhouette.3" data-f="pct0"></b>。<span class="fb">错。轮廓系数不是准确率，聚类也没有准确率。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>沉睡客户次季度仍有 <b data-v="CLU.repurchase.沉睡客户" data-f="pct0"></b> 自然回流，唤醒预算应小规模投放、按效果追加。<span class="fb">好。用数据支持了预算决策，也提醒了不确定性。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>高价值客户人均消费 <b data-v="CLU.outlier_demo.with.1" data-f="yuan"></b>，应该把大部分预算给他们。<span class="fb">错。这是没剔除批发商时的数字；而且高价值客户本来复购就高，预算的边际效果未必最大。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>批发商和测试账号已剔除，批发商建议由 B 端团队单独运营。<span class="fb">好。说明了数据口径。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>模型证明了发券能把促销敏感型客户变成高价值客户。<span class="fb">错。分群只描述现状，策略效果要靠 A/B 实验验证。</span></span></label>
+      </div>
+      <div class="row"><button class="go primary">提交汇报</button><span class="msg"></span></div>
+    </div>
+  </div>
+  <div class="quiz" data-answer="0">
+    <p class="q">下个月来了一位新客户，怎么给 TA 归群？</p>
+    <div class="opts"><button>用训练好的 pre.transform 和 kmeans.predict</button><button>把 TA 加进数据重新跑一遍 KMeans</button><button>只对 TA 一个人 fit_transform 再 predict</button></div>
+    <p class="explain">重跑 KMeans 会改变所有人的群编号；对一个人 fit 标准化毫无意义（方差为 0）。日常归群只用已经训练好的参数。</p>
+  </div>
+  <div class="why"><span class="tag">复盘清单</span><ul class="prose">
+    <li>聚类的样本是客户：先从订单表聚合特征。</li>
+    <li>快照日写死：特征只用之前的数据，之后的行为用来验证。</li>
+    <li>批发商、测试账号、退货、赠品要按业务规则处理。</li>
+    <li>长尾特征先 log，再标准化，否则距离被大数主导。</li>
+    <li>选 K 看肘部、轮廓系数、稳定性和业务可执行性。</li>
+    <li>命名写成规则，用未来行为验证，新客户用 predict 归群。</li>
+  </ul>
+  <p class="prose" style="margin-top:10px"><b>课后作业：</b>下载 <a href="data/orders.csv">orders.csv</a>，试试加入"品类数"或"主要渠道"特征，或者换成 <code>AgglomerativeClustering</code>，比较分群结果和复购验证。</p></div>
+</section>
+
+</main>
+</div>
+
+<script src="assets/app.js"></script>
+<script src="data/clustering.js"></script>
+<script>
+(() => {
+  const { $, $$, fmt, bars, table, lines, scatter, spot, esc } = ML;
+  const D = window.CLU;
+  if (!D) { document.querySelector('main').insertAdjacentHTML('afterbegin', '<p class="lab">没有找到数据文件，请先在项目根目录运行 <code>python build.py</code>。</p>'); return; }
+  const COLORS = ['var(--c1)', 'var(--c2)', 'var(--c3)', 'var(--c4)', 'var(--c5)', 'var(--c6)', 'var(--c7)', 'var(--c8)'];
+  const LETTER = 'ABCDEFGH';
+  const profTable = (el, t, names) => table(el, ['群', ...t.cols], t.rows.map(r => [names ? names[r[0]] : `群 ${LETTER[r[0]]}`, ...r.slice(1)]),
+    { right: t.cols.map((_, j) => j + 1), fmts: Object.fromEntries(t.cols.map((c, j) => [j + 1, c === '用券率' ? 'pct0' : c === '人数' ? 'int' : 'f1'])) });
+
+  // 第 1–3 步
+  spot($('#spot'), D);
+  table($('#clean-log'), ['问题', '数量'], D.clean_log, { right: [1], fmts: { 1: 'int' } });
+  table($('#agg-orders'), D.agg_orders.cols, D.agg_orders.rows);
+  table($('#agg-row'), ['客户ID', ...D.feat_cols], [D.agg_row]);
+  table($('#feat-desc'), ['特征', '最小', '中位数', '最大'], D.feat_cols.map(c => [c, ...D.feat_desc[c]]), { right: [1, 2, 3] });
+
+  // 第 4 步
+  const P = D.pca.xy;
+  const plot = (el, labels) => scatter(el, { pts: P.map((p, i) => [p[0], p[1], labels[i]]), colors: COLORS, r: 2.6, h: 260, xfmt: v => v.toFixed(0), yfmt: v => v.toFixed(0), xlabel: 'PCA 1' });
+  plot($('#scale-raw-plot'), D.pca.raw); profTable($('#scale-raw-tbl'), D.scale_demo.raw);
+  plot($('#scale-ok-plot'), D.pca.labels['5']); profTable($('#scale-ok-tbl'), D.scale_demo.scaled);
+  const O = D.outlier_demo;
+  table($('#outlier'), ['高价值客户群', '人数', '平均总消费', '平均客单价'], [['剔除异常账号', ...O.without], ['不剔除', ...O.with]], { right: [1, 2, 3], fmts: { 1: 'int', 2: 'yuan', 3: 'yuan' } });
+
+  // 第 5 步
+  const ks = D.ks;
+  function renderK() {
+    const k = +$('#k').value, i = ks.indexOf(k);
+    $('#k-v').textContent = k;
+    plot($('#k-plot'), D.pca.labels[k]);
+    lines($('#k-elbow'), { x: ks, h: 150, xfmt: v => v, yfmt: v => (v / 1000).toFixed(1) + 'k', series: [{ name: '簇内平方和', y: D.inertia, color: 'var(--accent)', dots: true }], marker: { x: k, points: [{ y: D.inertia[i], color: 'var(--ink)' }] } });
+    lines($('#k-sil'), { x: ks, h: 150, xfmt: v => v, yfmt: v => v.toFixed(2), series: [{ name: '轮廓系数', y: D.silhouette, color: 'var(--c2)', dots: true }], marker: { x: k, points: [{ y: D.silhouette[i], color: 'var(--ink)' }] } });
+    profTable($('#k-profile'), D.profiles[k]);
+    $('#k-note').innerHTML = `K = ${k}：轮廓系数 <b>${D.silhouette[i].toFixed(3)}</b>。` + (k === D.sil_best_k ? '这是轮廓系数最高的 K。' : k < D.sil_best_k ? '群太少，性质不同的客户被迫挤在一起（看看新客和沉睡客户是否混在了一个群）。' : '群开始变碎，新增的群往往只是把原来的群切成两半，策略上难以区分。');
+  }
+  $('#k').oninput = renderK; renderK();
+  const ari = D.stability.reduce((a, b) => a + b, 0) / D.stability.length;
+  $('#ari').textContent = ari.toFixed(3); $('#ari-min').textContent = Math.min(...D.stability).toFixed(3);
+
+  // 第 6 步：起名游戏
+  const t5 = D.profiles['5'], NAMES = ['高价值客户', '普通活跃', '新客', '沉睡客户', '促销敏感型'];
+  profTable($('#name-tbl'), t5);
+  $('#name-in').innerHTML = t5.rows.map(r => `<label class="field" for="nm-${r[0]}"><span>群 ${LETTER[r[0]]}</span><select id="nm-${r[0]}"><option value="">选择…</option>${NAMES.map(n => `<option>${n}</option>`).join('')}</select></label>`).join('');
+  $('#name-go').onclick = () => {
+    let right = 0;
+    t5.rows.forEach(r => { const s = $('#nm-' + r[0]), ok = s.value === D.names[r[0]]; right += ok; s.style.borderColor = ok ? 'var(--good)' : 'var(--bad)'; s.insertAdjacentHTML('afterend', `<small class="${ok ? '' : 'verdict bad'}">${ok ? '对' : '应为：' + D.names[r[0]]}</small>`); });
+    $('#name-msg').innerHTML = `答对 <b>${right} / 5</b>。规则见下方 <code>name_clusters()</code>：每条规则认领"最鲜明"的那个群。`;
+    $('#name-go').disabled = true;
+  };
+  const order = ['高价值客户', '普通活跃', '促销敏感型', '新客', '沉睡客户'];
+  const repBars = (el, rates) => bars(el, order.map(n => ({ label: n, value: rates[n] ?? 0, cls: n === '沉睡客户' ? 'leak' : '' })), { f: 'pct0', max: 1 });
+  repBars($('#repurchase'), D.repurchase);
+  repBars($('#rep-leak'), D.repurchase_leak);
+  repBars($('#rep-ok'), D.repurchase);
+
+  // 第 7 步：策略表与归群
+  const STRAT = {
+    '高价值客户': ['专属客服、新品优先、积分加倍；不发大额券', '客单价、留存'],
+    '普通活跃': ['搭配推荐、满减凑单，提升客单价', '客单价、购买频次'],
+    '促销敏感型': ['只在大促时触达，用券拉动；平时少打扰', '券核销率、毛利'],
+    '新客': ['第二单激励、新手引导，30 天内促成复购', '30 天复购率'],
+    '沉睡客户': ['小规模唤醒券，按回流效果决定是否追加', '回流率、单客成本'],
+  };
+  $('#strategy').innerHTML = order.map(n => `<tr><td><b>${n}</b></td><td class="r">${fmt(D.segment_sizes[n], 'int')}</td><td class="r">${fmt(D.repurchase[n], 'pct0')}</td><td style="white-space:normal">${STRAT[n][0]}</td><td>${STRAT[n][1]}</td></tr>`).join('');
+  const S = D.sim, DEF = { 最近购买距今天数: 30, 购买次数: 12, 总消费: 2400, 客单价: 200, 首购距今天数: 500, 用券率: 0.2 };
+  const LIM = { 最近购买距今天数: [0, 730, 1], 购买次数: [1, 80, 1], 总消费: [50, 40000, 50], 客单价: [20, 1500, 10], 首购距今天数: [0, 730, 1], 用券率: [0, 1, 0.05] };
+  $('#as-in').innerHTML = S.order.map(c => `<label class="field" for="as-${c}"><span>${c}</span><input type="number" id="as-${c}" min="${LIM[c][0]}" max="${LIM[c][1]}" step="${LIM[c][2]}" value="${DEF[c]}"></label>`).join('');
+  function assign() {
+    const z = S.order.map((c, i) => { const v = +$('#as-' + c).value || 0; return ((S.log.includes(c) ? Math.log1p(v) : v) - S.mean[i]) / S.scale[i]; });
+    const dist = S.centers.map(ct => ct.reduce((a, m, i) => a + (m - z[i]) ** 2, 0));
+    const best = dist.indexOf(Math.min(...dist)), name = D.names[best];
+    $('#as-out').textContent = name;
+    $('#as-why').innerHTML = `离"${esc(name)}"的质心最近（距离 ${Math.sqrt(dist[best]).toFixed(2)}）。建议策略：${STRAT[name][0]}。`;
+  }
+  $('#as-in').oninput = assign; assign();
+
+  ML.init();
+})();
+</script>
+</body>
+</html>

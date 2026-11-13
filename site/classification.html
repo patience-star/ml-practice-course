@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>会员流失预警 · 机器学习实战课</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="clf">
+<header class="top"><div class="top-in">
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="8" width="20" height="6" rx="3" style="fill:var(--pipe)"/><circle cx="16" cy="18" r="2.6" style="fill:var(--leak)"/></svg>机器学习实战课</a>
+  <nav><a href="index.html">总览</a><a href="regression.html">回归·房价</a><a href="classification.html" aria-current="page">分类·流失</a><a href="clustering.html">聚类·分群</a></nav>
+  <span class="meter"></span>
+</div></header>
+
+<div class="wrap layout">
+<aside class="rail" id="rail" aria-label="步骤导航"></aside>
+<main>
+
+<section class="hero">
+  <span class="eyebrow">项目 B · 二分类 · 星海通信</span>
+  <h1>会员流失预警：把挽留预算花在快要走的人身上</h1>
+  <p class="lede">一份从 CRM 导出的 <b data-v="CLF.n_raw" data-f="int"></b> 行客户数据，一笔有限的挽留预算。你要回答运营总监的问题：这个月该给谁打电话？</p>
+  <div class="facts">
+    <span>流失率 <b data-v="CLF.churn_rate" data-f="pct"></b></span><span>类别不平衡</span><span>埋了 <b>1</b> 个泄漏字段</span>
+    <span>Pipeline · ColumnTransformer · GridSearchCV</span>
+  </div>
+</section>
+
+<!-- ============================== 0 业务理解 ============================== -->
+<section class="step" id="s0" data-step="0" data-title="业务理解">
+  <header class="step-head"><span class="step-no">STEP 0</span><h2>业务理解：先把业务问题翻译成机器学习问题</h2></header>
+  <div class="npc"><div class="ava">周</div><div class="bubble"><div class="who">运营总监 · 周敏</div>上季度流失了快两成会员。我们有一笔挽留预算：给客户打电话、送话费券，每人成本大约 80 元。但不可能给所有人都打。你能告诉我该打给谁吗？准确率最好 90% 以上。</div></div>
+  <div class="npc me"><div class="ava">你</div><div class="bubble"><div class="who">你 · 新入职数据科学家</div>好的。在写第一行代码之前，我先把几件事和您对齐：预测什么、什么时候预测、怎样算"做得好"。</div></div>
+  <div class="why">
+    <span class="tag">为什么</span>
+    <p class="prose">大部分失败的机器学习项目，不是模型不够好，而是一开始就解错了题。业务方说的"准确率"往往不是他真正关心的东西。周总真正关心的是：<b>花出去的挽留费用，能换回多少本来要流失的收入</b>。</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>业务语言</th><th>机器学习语言</th><th>为什么这样翻译</th></tr></thead>
+    <tbody>
+      <tr><td>下个月谁会走？</td><td>二分类：是否流失 = 1 / 0</td><td>结果只有两种，历史上每个客户都有答案（标签）</td></tr>
+      <tr><td>该给谁打电话？</td><td>按流失概率排序 + 选一个阈值</td><td>模型输出的是概率，打不打电话是业务决策</td></tr>
+      <tr><td>怎样算做得好？</td><td>比模型用 AUC，定阈值看利润</td><td>流失客户只占两成，准确率会骗人（第 5 步亲眼看到）</td></tr>
+      <tr><td>和现在比好多少？</td><td>基线：不打电话 / 全部打电话</td><td>没有基线，任何数字都无法判断好坏</td></tr>
+    </tbody>
+  </table></div>
+
+  <aside class="leak" data-id="clf-time">
+    <div class="leak-head"><span class="tag">漏点 1 · 预测时点</span><h3>预测的那一刻，你手里到底有哪些信息？</h3><span class="seen"></span></div>
+    <p class="prose">模型上线后，会在每个月初给所有客户打分。所以<b>只有在"月初那一刻"已经存在的信息，才能当特征</b>。在此之后才产生的信息哪怕和流失高度相关，也是泄漏：训练时模型能看到，上线时却拿不到。</p>
+    <div class="timeline"><div>入网签约</div><div>每月账单</div><div>近 30 天行为</div><div class="now">预测时点（月初）</div><div class="after">提交注销申请</div><div class="after">挽留专员致电</div><div class="after">正式流失</div></div>
+    <div class="classify">
+      <p class="hint">点选你认为<b>不能</b>当特征的字段（泄漏），再点"检查"。</p>
+      <div class="chips">
+        <button class="chip" data-leak="0" data-why="签约时就有">合约类型</button>
+        <button class="chip" data-leak="0" data-why="每天都在更新，月初可得">在网月数</button>
+        <button class="chip" data-leak="1" data-why="客户申请注销后才会打">挽留专员通话次数</button>
+        <button class="chip" data-leak="0" data-why="截至月初的 30 天">近30天投诉次数</button>
+        <button class="chip" data-leak="1" data-why="这几乎就是答案本身">注销申请日期</button>
+        <button class="chip" data-leak="0" data-why="账单系统">月费</button>
+        <button class="chip" data-leak="1" data-why="流失之后才做的调查">流失后回访满意度</button>
+        <button class="chip" data-leak="0" data-why="截至月初的 30 天">近30天使用时长</button>
+      </div>
+      <div class="row"><button class="go primary">检查</button><span class="msg"></span></div>
+    </div>
+  </aside>
+
+  <div class="quiz" data-answer="1">
+    <p class="q">周总要求"准确率 90% 以上"。最好的回应是？</p>
+    <div class="opts">
+      <button>好的，我们冲 90%。</button>
+      <button>先确认：漏掉一个要走的客户，和多打一个不必要的电话，哪个代价更大？</button>
+      <button>准确率越高越好，这个不需要讨论。</button>
+    </div>
+    <p class="explain">两种错误的代价不同：漏掉一个流失客户损失一年的收入，多打一个电话只花 80 元。指标必须反映这种不对称，所以我们最后用"利润"来定阈值。何况流失率只有约两成，一个永远说"不流失"的模型准确率就有八成。</p>
+  </div>
+</section>
+
+<!-- ============================== 1 数据体检 ============================== -->
+<section class="step" id="s1" data-step="1" data-title="数据体检">
+  <header class="step-head"><span class="step-no">STEP 1</span><h2>数据体检：先别急着建模，看看数据长什么样</h2></header>
+  <div class="npc"><div class="ava">周</div><div class="bubble"><div class="who">运营总监 · 周敏</div>数据是 IT 从 CRM 直接导出来的，应该挺干净的吧？</div></div>
+  <div class="why"><span class="tag">为什么</span><p class="prose">"应该挺干净"是数据科学里最危险的一句话。体检的目的是找出所有会让模型学歪的问题，每发现一个问题，就对应下一步的一条清洗规则。这一步花的时间，通常会在后面省回来十倍。</p></div>
+  <div data-code="CLF.code.load"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">体检报告</span><h3>pandas 把每一列读成了什么？</h3></div>
+    <div id="dtypes"></div>
+    <p class="hint">注意"累计消费"：明明是金额，却被读成了 <code>str</code>（字符串）。这通常意味着列里混进了非数字的东西。</p>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">找茬</span><h3>这 9 行原始数据里藏着哪些问题？</h3></div>
+    <div id="spot"></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">业务规律</span><h3>不同客户的流失率</h3></div>
+    <div class="split">
+      <div><p class="hint">按合约类型</p><div id="by-contract"></div></div>
+      <div><p class="hint">按在网时长</p><div id="by-tenure"></div></div>
+    </div>
+    <p class="hint">月付客户、刚入网半年内的客户流失最严重。先看懂这些规律，后面才能判断模型学到的东西合不合理。</p>
+  </div>
+  <div class="quiz" data-answer="2">
+    <p class="q">"累计消费"被读成字符串，最可能的原因是？</p>
+    <div class="opts"><button>pandas 读数据出了 bug</button><button>金额太大，超出了数字范围</button><button>列里混有非数字内容，比如空格</button></div>
+    <p class="explain">新入网（在网 0 个月）的客户，系统把累计消费写成了一个空格 " "。只要一列里有一个值不是数字，pandas 就只能把整列当文本。这是真实业务数据里非常常见的坑。</p>
+  </div>
+</section>
+
+<!-- ============================== 2 数据清洗 ============================== -->
+<section class="step" id="s2" data-step="2" data-title="数据清洗">
+  <header class="step-head"><span class="step-no">STEP 2</span><h2>数据清洗：只做"规则型"清洗</h2></header>
+  <div class="why">
+    <span class="tag">为什么</span>
+    <p class="prose">清洗分两类，界限一定要清楚：</p>
+    <ul class="prose">
+      <li><b>规则型</b>：不需要从数据里"学"任何参数，比如去重、统一写法、把空格转成 0。它对每一行的处理结果和其他行无关，所以<b>可以在切分前做</b>，上线时对新数据原样复用。</li>
+      <li><b>学习型</b>：需要从数据里算出一个数，比如用中位数填缺失、标准化。这个数如果用全部数据算，测试集的信息就漏进了训练。所以<b>必须在切分后、放进 Pipeline</b>（第 4 步）。</li>
+    </ul>
+    <p class="prose">所以下面 <code>clean()</code> 里年龄异常值只是改成缺失，填多少留给 Pipeline 里的 <code>SimpleImputer</code>。</p>
+  </div>
+  <div data-code="CLF.code.clean"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">清洗日志</span><h3>每条规则处理了多少行</h3></div>
+    <div id="clean-log"></div>
+    <p class="hint">清洗后剩 <b data-v="CLF.n_clean" data-f="int"></b> 位客户。把清洗写成函数，是为了上线时对新数据执行完全相同的处理。</p>
+  </div>
+
+  <aside class="leak" data-id="clf-target">
+    <div class="leak-head"><span class="tag">漏点 2 · 目标泄漏</span><h3>"挽留专员通话次数"：一个藏在数据里的答案</h3><span class="seen"></span></div>
+    <p class="prose">这一列和流失的相关性高得惊人，因为挽留专员只会给<b>已经提交注销申请</b>的客户打电话。它不是流失的原因，而是流失的"结果"。下面是同一个 HistGB 模型、同一份训练集，只差这一列：</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">泄漏版：保留这一列</button><button data-show="right" class="good">正确版：删掉它</button></div>
+      <div data-pane="wrong">
+        <div id="leak-wrong"></div>
+        <p class="prose"><span class="verdict bad">线下 AUC 接近完美，上线就露馅。</span>上线时还没有人提交注销申请，所有人的通话次数都是 0，模型最依赖的那条线索消失了，AUC 从 <b data-v="CLF.auc_leak" data-f="f3"></b> 掉到 <b data-v="CLF.auc_leak_online" data-f="f3"></b>，比老老实实的模型还差。</p>
+      </div>
+      <div data-pane="right">
+        <div id="leak-right"></div>
+        <p class="prose"><span class="verdict good">线下线上一致。</span>线下分数没那么好看，但它是真的：上线后的表现和线下估计基本一致。可信的 <b data-v="CLF.auc_clean" data-f="f2"></b> 比虚假的 <b data-v="CLF.auc_leak" data-f="f2"></b> 有用得多。</p>
+      </div>
+    </div>
+    <div data-code="CLF.code.leak_demo"></div>
+    <p class="hint">识别口诀：一个特征好得不像真的，先怀疑它是不是在结果之后才产生的。</p>
+  </aside>
+
+  <div class="pit"><h3>常见坑</h3><ul>
+    <li>用 <code>df.dropna()</code> 一删了之：本例中缺失的使用时长是埋点问题，与流失无关，删掉会白白损失样本。</li>
+    <li>空格、"N/A"、"-"、"null" 都可能代表缺失，<code>isna()</code> 统计不到它们。</li>
+    <li>ID 列不是特征。模型可能记住 ID 的规律（比如新用户 ID 更大），上线时完全不成立。</li>
+  </ul></div>
+  <div class="quiz" data-answer="1">
+    <p class="q">下面哪个操作可以放心地在切分训练集 / 测试集之前做？</p>
+    <div class="opts"><button>用全部数据的年龄中位数填补缺失</button><button>把 "Alipay"、" alipay" 统一成 "alipay"</button><button>对全部数据做标准化</button></div>
+    <p class="explain">统一写法是规则型操作，处理一行时不需要看其他行。中位数和标准化都要从数据中"学"参数，必须只在训练集上学。</p>
+  </div>
+</section>
+
+<!-- ============================== 3 数据切分 ============================== -->
+<section class="step" id="s3" data-step="3" data-title="数据切分">
+  <header class="step-head"><span class="step-no">STEP 3</span><h2>数据切分：把测试集锁进保险柜</h2></header>
+  <div class="why"><span class="tag">为什么</span><p class="prose">测试集扮演的是"上线后遇到的新客户"。它的唯一用途，是在所有决定都做完之后，给出一次诚实的成绩。所以它必须<b>尽早切出来，并且封存</b>：之后的特征处理、选模型、调参，都只能看训练集。</p></div>
+  <div data-code="CLF.code.split"></div>
+  <div class="kpis">
+    <div class="kpi"><div class="k">训练集</div><div class="v" data-v="CLF.n_train" data-f="int"></div></div>
+    <div class="kpi"><div class="k">测试集（封存）</div><div class="v" data-v="CLF.n_test" data-f="int"></div></div>
+    <div class="kpi"><div class="k">训练集流失率</div><div class="v" data-v="CLF.rate_train" data-f="pct"></div></div>
+    <div class="kpi"><div class="k">测试集流失率</div><div class="v" data-v="CLF.rate_test" data-f="pct"></div></div>
+  </div>
+  <p class="prose">为什么要 <code>stratify=y</code>？我们不加分层、换 30 个随机种子各切一次，测试集的流失率在 <b data-v="CLF.no_strat_range.0" data-f="pct"></b> 到 <b data-v="CLF.no_strat_range.1" data-f="pct"></b> 之间晃动。少数类越少，这种晃动越大，评估结果也跟着不稳。</p>
+  <div class="quiz" data-answer="0">
+    <p class="q">测试集最重要的使用规则是什么？</p>
+    <div class="opts"><button>所有决定做完之后，只用一次</button><button>每调一次参数都看一眼，确保方向正确</button><button>测试集越大越好，最好占一半</button></div>
+    <p class="explain">每看一次测试集，你的决定就会被它影响一点，它就不再是"没见过的数据"了。第 6 步会用实验证明：反复看测试集会让汇报的分数系统性虚高。</p>
+  </div>
+</section>
+
+<!-- ============================== 4 特征与预处理 ============================== -->
+<section class="step" id="s4" data-step="4" data-title="预处理 Pipeline">
+  <header class="step-head"><span class="step-no">STEP 4</span><h2>特征与预处理：所有"学习型"处理都进 Pipeline</h2></header>
+  <div class="why"><span class="tag">为什么</span>
+    <p class="prose">数值列和类别列需要不同的处理：数值要填缺失、标准化；类别要独热编码。<code>ColumnTransformer</code> 把它们分开处理再拼起来，<code>Pipeline</code> 再把预处理和模型串成一个整体。</p>
+    <p class="prose">串起来的好处不只是代码整洁。<code>Pipeline.fit</code> 保证预处理<b>只在训练数据上学习</b>；交叉验证时，每一折也只用该折的训练部分去学。这是 scikit-learn 官方推荐的防泄漏方式。</p>
+  </div>
+  <div data-code="CLF.code.prep"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">排序</span><h3>把一次正确的训练流程按顺序排好</h3></div>
+    <div class="order" data-answer="a,b,c,d,e" data-ok="Pipeline 帮你自动完成了 b → c → d 的衔接。">
+      <div class="chips pool">
+        <button class="chip" data-id="d">用训练集学到的参数 transform 测试集</button>
+        <button class="chip" data-id="a">切分训练集 / 测试集</button>
+        <button class="chip" data-id="e">在测试集上评估一次</button>
+        <button class="chip" data-id="c">用处理后的训练数据训练模型</button>
+        <button class="chip" data-id="b">在训练集上 fit 预处理（中位数、均值、类别表）</button>
+      </div>
+      <ol class="slots"></ol>
+      <p class="msg"></p>
+    </div>
+  </div>
+
+  <aside class="leak" data-id="clf-noise">
+    <div class="leak-head"><span class="tag">漏点 3 · 先选特征再验证</span><h3>在纯随机数据上，"做出"一个准确率 <span data-v="CLF.noise_wrong" data-f="pct0"></span> 的模型</h3><span class="seen"></span></div>
+    <p class="prose">运营同事又拉来 1 万个埋点特征，但只有 200 个试点用户。这里我们故意让特征和标签<b>全是随机数</b>，任何模型的真实准确率都应该是 50%。区别只在于：挑选特征这一步放在哪里。这个例子来自 scikit-learn 官方文档的 Common pitfalls 一章。</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">泄漏版：先在全部数据上挑特征</button><button data-show="right" class="good">正确版：挑特征放进 Pipeline</button></div>
+      <div data-pane="wrong"><div id="noise-wrong"></div><p class="prose"><span class="verdict bad">在随机数上得到 <b data-v="CLF.noise_wrong" data-f="pct0"></b> 的准确率。</span><code>SelectKBest</code> 看过全部 200 个样本的标签，挑出的 25 个特征"恰好"和这些标签相关。交叉验证时，验证折的答案早已被用来挑过特征了。</p></div>
+      <div data-pane="right"><div id="noise-right"></div><p class="prose"><span class="verdict good">准确率 <b data-v="CLF.noise_right" data-f="pct0"></b>，在 50% 附近。</span>这才是真相：数据里没有任何规律。每一折只用训练部分挑特征，验证折的标签从没被看过。</p></div>
+    </div>
+    <div data-code="CLF.code.noise"></div>
+  </aside>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">为什么要把 <code>StandardScaler</code> 放进 Pipeline，而不是事先对整个 X 做 <code>fit_transform</code>？</p>
+    <div class="opts"><button>这样代码运行更快</button><button>StandardScaler 不放进 Pipeline 会报错</button><button>保证均值和方差只从训练数据（或训练折）中学习</button></div>
+    <p class="explain">事先在整个 X 上 fit，测试集的均值方差就参与了训练数据的变换。标准化造成的泄漏通常不大，但特征选择、目标编码这类处理造成的泄漏可以大到离谱，就像上面的随机数实验。养成习惯：凡是 fit，都进 Pipeline。</p>
+  </div>
+</section>
+
+<!-- ============================== 5 建模 ============================== -->
+<section class="step" id="s5" data-step="5" data-title="建模与基线">
+  <header class="step-head"><span class="step-no">STEP 5</span><h2>建模：先立一个"傻瓜基线"，再上真模型</h2></header>
+  <div class="guess" data-v="CLF.dummy_acc" data-f="pct" data-gf="pct0">
+    <p class="q">先猜一猜：一个什么都不学、永远回答"不流失"的模型，准确率是多少？</p>
+    <div class="row"><input type="range" min="0.3" max="1" step="0.01" value="0.5" aria-label="你猜的准确率"><output></output><button class="go primary">揭晓</button></div>
+    <div class="reveal"><p>真实结果：<span class="big truth"></span></p><p class="diff"></p><p class="prose">流失客户只占约两成，所以闭着眼睛说"都不会走"，就能拿到八成的准确率。但它一个要走的客户都找不出来（召回率 = 0）。这就是不平衡数据下的<b>准确率陷阱</b>。</p></div>
+  </div>
+  <div class="why"><span class="tag">为什么</span><p class="prose"><code>DummyClassifier</code> 是一把尺子：任何模型都必须先明显超过它，才算学到了东西。下面四个模型都用 5 折交叉验证、只在训练集上比较。<b>AUC</b> 衡量的是排序能力：随机挑一个流失客户和一个留存客户，模型给前者打分更高的概率。0.5 等于瞎猜，1 是完美。</p></div>
+  <div data-code="CLF.code.model"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">模型擂台</span><h3>5 折交叉验证结果（训练集）</h3></div>
+    <div id="arena"></div>
+    <p class="hint">看 Dummy 那一行：准确率不低，召回率和 AUC 却是 0 和 0.5。再看逻辑回归：最简单的模型，AUC 却是最高的之一。</p>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">不平衡怎么办</span><h3><code>class_weight="balanced"</code> 的效果</h3></div>
+    <div data-code="CLF.code.weight"></div>
+    <div id="weight"></div>
+    <p class="hint">加权后模型更"敢"把客户判成流失：召回率大涨，精确率下降。它的效果相当于把判定阈值调低，所以第 7 步我们直接用业务利润来选阈值。</p>
+  </div>
+  <div class="quiz" data-answer="1">
+    <p class="q">一个模型准确率 85%，而 Dummy 基线准确率是 <span data-v="CLF.dummy_acc" data-f="pct"></span>。这说明什么？</p>
+    <div class="opts"><button>模型很好，85% 已经很高了</button><button>只比瞎猜好一点，还需要看召回率、AUC 等指标</button><button>模型比基线差</button></div>
+    <p class="explain">在不平衡数据上，准确率的"及格线"是多数类占比，而不是 50%。判断模型好坏要看它比基线强多少，并结合召回率、AUC 这类不被多数类主导的指标。</p>
+  </div>
+</section>
+
+<!-- ============================== 6 评估调参 ============================== -->
+<section class="step" id="s6" data-step="6" data-title="调参与选型">
+  <header class="step-head"><span class="step-no">STEP 6</span><h2>调参与选型：交叉验证说了算，测试集继续封存</h2></header>
+  <div class="why"><span class="tag">为什么</span><p class="prose"><code>GridSearchCV</code> 把每组参数都做一次 5 折交叉验证，挑平均分最高的。整个过程只用训练集。点开下面的网格，看看学习率和叶子数怎样影响 AUC。</p></div>
+  <div data-code="CLF.code.tune"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">调参网格</span><h3>HistGB 的交叉验证 AUC（点格子查看）</h3></div>
+    <div id="grid"></div>
+    <p class="hint" id="grid-pick">黑框是最优组合：learning_rate=<b data-v="CLF.best_params.learning_rate"></b>，max_leaf_nodes=<b data-v="CLF.best_params.max_leaf_nodes"></b>，AUC = <b data-v="CLF.best_cv_auc" data-f="f3"></b>。</p>
+  </div>
+  <div class="npc me"><div class="ava">你</div><div class="bubble"><div class="who">你</div>调参后的 HistGB 交叉验证 AUC 是 <b data-v="CLF.best_cv_auc" data-f="f3"></b>，逻辑回归是 <b data-v="CLF.lr_cv_auc" data-f="f3"></b>，几乎打平。我选逻辑回归：更简单，能直接解释每个因素的影响，上线和维护成本也更低。</div></div>
+  <div data-code="CLF.code.choose"></div>
+
+  <aside class="leak" data-id="clf-test">
+    <div class="leak-head"><span class="tag">漏点 4 · 反复看测试集</span><h3>挑出来的"冠军"，汇报的分数为什么总是偏高？</h3><span class="seen"></span></div>
+    <p class="prose">假设团队试了 50 个版本，每次都拿同一份 200 人的小测试集打分，最后挑最高的去汇报。测试集参与了"挑选"，它就变成了训练过程的一部分。我们把"抽小测试集 → 挑冠军 → 看冠军在其余新客户上的真实分"重复了 200 次：</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">用测试集挑模型</button><button data-show="right" class="good">用交叉验证挑模型</button></div>
+      <div data-pane="wrong"><div id="gap"></div><p class="prose"><span class="verdict bad">有 <b data-v="CLF.gap_pos" data-f="pct0"></b> 的情况下，汇报分比真实分高。</span>平均高估 <b data-v="CLF.gap_mean" data-f="f3"></b> AUC。原因是 50 个版本里，总有几个"碰巧"适合这 200 个人，挑最高的就等于挑中了运气。</p></div>
+      <div data-pane="right"><p class="prose"><span class="verdict good">我们的做法：</span>选型和调参全部用训练集上的交叉验证完成，测试集直到第 7 步才打开<b>一次</b>。这样测试集上的分数，才是对上线表现的无偏估计。如果确实需要反复比较，就再切一份"验证集"给它用，测试集依然不动。</p></div>
+    </div>
+    <div data-code="CLF.code.test_leak"></div>
+  </aside>
+
+  <div class="quiz" data-answer="0">
+    <p class="q">两个模型交叉验证 AUC 只差 0.001，该怎么选？</p>
+    <div class="opts"><button>选更简单、可解释、好维护的那个</button><button>选分数高的那个，0.001 也是赢</button><button>在测试集上再比一次，谁高选谁</button></div>
+    <p class="explain">0.001 远小于交叉验证本身的波动，统计上就是打平。打平时，简单性、可解释性、上线成本才是决定因素。第三个选项正是刚刚演示的泄漏。</p>
+  </div>
+</section>
+
+<!-- ============================== 7 决策与上线 ============================== -->
+<section class="step" id="s7" data-step="7" data-title="决策与上线">
+  <header class="step-head"><span class="step-no">STEP 7</span><h2>决策与上线：从概率到"该给谁打电话"</h2></header>
+  <div data-code="CLF.code.final"></div>
+  <div class="kpis">
+    <div class="kpi good"><div class="k">测试集 AUC（只看这一次）</div><div class="v" data-v="CLF.test_auc" data-f="f3"></div></div>
+    <div class="kpi"><div class="k">交叉验证 AUC</div><div class="v" data-v="CLF.lr_cv_auc" data-f="f3"></div></div>
+    <div class="kpi"><div class="k">测试集客户数</div><div class="v" data-v="CLF.n_test" data-f="int"></div></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">曲线</span><h3>ROC 与 PR 曲线（测试集）</h3></div>
+    <div class="split"><div><p class="hint">ROC：横轴误报率，纵轴召回率</p><div id="roc"></div></div><div><p class="hint">PR：横轴召回率，纵轴精确率</p><div id="pr"></div></div></div>
+    <p class="hint">不平衡数据更该看 PR 曲线：它直接回答"我打出去的电话里，有多少真是要走的人"。</p>
+  </div>
+
+  <div class="lab" id="profit-lab">
+    <div class="lab-title"><span class="tag">利润实验台</span><h3>阈值该定在哪？让钱来回答</h3></div>
+    <div class="fields">
+      <label class="field" for="val"><span>挽回一位客户的年价值（元）</span><input type="number" id="val" value="1200" min="0" step="100"></label>
+      <label class="field" for="cost"><span>每通挽留电话成本（元）</span><input type="number" id="cost" value="80" min="0" step="10"></label>
+      <label class="field" for="succ"><span>挽留成功率 <b id="succ-v"></b></span><input type="range" id="succ" min="0.05" max="0.8" step="0.05" value="0.35"></label>
+    </div>
+    <div data-tabs id="mode-tabs">
+      <div class="seg"><button data-show="t" class="on">按阈值</button><button data-show="n">按预算（打 N 个电话）</button></div>
+      <div data-pane="t"><label class="field" for="thr"><span>流失概率 ≥ <b id="thr-v"></b> 就打电话</span><input type="range" id="thr" min="0.01" max="0.99" step="0.01" value="0.5"></label></div>
+      <div data-pane="n"><label class="field" for="topn"><span>预算只够打 <b id="topn-v"></b> 个电话（给概率最高的人）</span><input type="range" id="topn" min="0" max="1000" step="10" value="150"></label></div>
+    </div>
+    <div class="split">
+      <div><div class="cm" id="cm"></div></div>
+      <div class="kpis" id="profit-kpis"></div>
+    </div>
+    <div id="profit-curve"></div>
+    <p class="hint" id="profit-note"></p>
+  </div>
+
+  <div class="why"><span class="tag">为什么</span><p class="prose">默认阈值 0.5 是数学上的方便，不是业务上的最优。挽回一位客户值 1200 元，打一个电话只要 80 元，就应该"宁可多打"；如果电话很贵、挽留成功率很低，阈值就该提高。阈值是业务参数，应该由成本和收益决定，而且成本变了要重新算。</p></div>
+
+  <div class="lab">
+    <div class="lab-title"><span class="tag">解释</span><h3>模型最依赖哪些信息？（置换重要性）</h3></div>
+    <div data-code="CLF.code.explain"></div>
+    <div id="importance"></div>
+    <p class="hint">注意：重要性说的是"模型靠什么做预测"，不是"什么导致了流失"。想知道打折能不能留住人，要做 A/B 实验。</p>
+  </div>
+
+  <div class="lab">
+    <div class="lab-title"><span class="tag">客户模拟器</span><h3>调一调，看这位客户的流失风险</h3></div>
+    <div class="row"><button id="p-risk">载入：高风险客户</button><button id="p-loyal">载入：忠诚客户</button></div>
+    <div class="fields" id="sim-in"></div>
+    <div class="split">
+      <div><p class="hint">预测流失概率（平均客户是 <b id="sim-base"></b>）</p><p class="big" id="sim-p"></p><div class="track" style="height:12px;background:var(--paper);border-radius:6px;overflow:hidden"><div id="sim-bar" style="height:100%;background:var(--accent);width:0"></div></div></div>
+      <div><p class="hint">与平均客户相比，各因素把风险推高（红）还是压低（绿）</p><div id="sim-why"></div></div>
+    </div>
+    <p class="hint">这就是线上的那个逻辑回归：网页用导出的系数复现了 sklearn 的计算，构建时已逐条核对过结果一致。</p>
+  </div>
+
+  <div data-code="CLF.code.deploy"></div>
+  <div class="kpis">
+    <div class="kpi"><div class="k">测试集 AUC</div><div class="v" data-v="CLF.test_auc" data-f="f3"></div></div>
+    <div class="kpi good"><div class="k">下季度新客户 AUC</div><div class="v" data-v="CLF.new_auc" data-f="f3"></div></div>
+    <div class="kpi"><div class="k">新客户数</div><div class="v" data-v="CLF.n_new" data-f="int"></div></div>
+  </div>
+  <p class="prose">上线后的真实表现和测试集估计基本一致。这说明前面每一步防泄漏的功夫没有白费。</p>
+
+  <aside class="leak" data-id="clf-serving">
+    <div class="leak-head"><span class="tag">漏点 5 · 训练与线上不一致</span><h3>线下一套口径，线上一套口径</h3><span class="seen"></span></div>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">常见的错误做法</button><button data-show="right" class="good">我们的做法</button></div>
+      <div data-pane="wrong"><ul class="prose">
+        <li>线上工程师用 Java 重写了清洗逻辑，"累计消费"的空格被当成缺失，而训练时是 0。</li>
+        <li>训练用的"近 30 天"截止到月底，线上截止到月初，口径差了一周。</li>
+        <li>只保存了模型，标准化参数线上重新算了一遍。</li>
+      </ul></div>
+      <div data-pane="right"><ul class="prose">
+        <li>新数据走同一个 <code>clean()</code> 函数。</li>
+        <li>用 <code>joblib</code> 保存<b>整条 Pipeline</b>（预处理参数和模型在一起），原始列进、概率出。官方文档也介绍了更安全的 <code>skops</code> 格式。</li>
+        <li>每个特征写清"数据来源 + 计算截止时间"，上线前逐一核对；上线后每月监控 AUC 和预测分布，季度重训。</li>
+      </ul></div>
+    </div>
+  </aside>
+
+  <div class="lab">
+    <div class="lab-title"><span class="tag">向老板汇报</span><h3>勾选你会放进汇报里的结论</h3></div>
+    <div class="report">
+      <div class="list">
+        <label data-good="1"><input type="checkbox"><span>模型能把最可能流失的客户排在前面：测试集 AUC <b data-v="CLF.test_auc" data-f="f3"></b>，上线后新客户上为 <b data-v="CLF.new_auc" data-f="f3"></b>。<span class="fb">好。用业务能理解的话说清了排序能力，并给出了上线验证。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>模型准确率 85%，所以 85% 的流失客户都能被提前找到。<span class="fb">错。准确率不等于召回率，而且在不平衡数据上准确率会误导人。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>按 1200 元客户价值、80 元电话成本估算，只给高风险客户打电话，测试集上可多挽回 <b id="rep-profit"></b>；全部打电话反而<b id="rep-all"></b>。<span class="fb">好。老板关心的是钱，而且你说明了假设。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>"挽留专员通话次数"是最强的信号，建议多打挽留电话来降低流失。<span class="fb">错。这是泄漏字段，而且把结果当成了原因。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>月付合约、入网半年内、投诉多的客户风险最高，可以考虑引导这类客户签年约。<span class="fb">好。有业务洞察，但最好补一句"效果需要 A/B 实验验证"。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>模型证明了投诉会导致流失。<span class="fb">错。模型只发现了相关性。也可能是本来就想走的人更爱投诉。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>上线后每月监控效果，成本变化时重新计算阈值，每季度用新数据重训。<span class="fb">好。模型不是一次性交付物。</span></span></label>
+      </div>
+      <div class="row"><button class="go primary">提交汇报</button><span class="msg"></span></div>
+    </div>
+  </div>
+
+  <div class="quiz" data-answer="2">
+    <p class="q">挽留电话成本从 80 元涨到 300 元，最合理的做法是？</p>
+    <div class="opts"><button>重新训练模型</button><button>阈值不变，继续执行</button><button>模型不用动，用新成本重新算最优阈值</button></div>
+    <p class="explain">模型负责估计"谁可能走"，阈值负责"值不值得打"。成本变了，排序能力没变，只需要重新选阈值。去上面的利润实验台把成本改成 300 试试。</p>
+  </div>
+
+  <div class="why"><span class="tag">复盘清单</span><ul class="prose">
+    <li>业务问题 → 二分类；成功标准 → 利润，不是准确率。</li>
+    <li>"挽留专员通话次数"是目标泄漏：预测时点之后才产生。</li>
+    <li>规则型清洗可以先做；学习型处理全部进 Pipeline。</li>
+    <li>先立 Dummy 基线；不平衡数据看召回率、AUC、PR 曲线。</li>
+    <li>选型调参靠交叉验证，测试集只开一次。</li>
+    <li>阈值是业务参数；保存整条 Pipeline；上线后监控与重训。</li>
+  </ul>
+  <p class="prose" style="margin-top:10px"><b>课后作业：</b>下载 <a href="data/churn.csv">churn.csv</a>（原始脏数据）和 <a href="data/churn_next_quarter.csv">churn_next_quarter.csv</a>（下季度新客户），不看代码自己走一遍流程，然后与 <code>ml/classification.py</code> 对照。</p></div>
+</section>
+
+</main>
+</div>
+
+<script src="assets/app.js"></script>
+<script src="data/classification.js"></script>
+<script>
+(() => {
+  const { $, $$, fmt, bars, table, lines, hist, heat, spot } = ML;
+  const D = window.CLF;
+  if (!D) { document.querySelector('main').insertAdjacentHTML('afterbegin', '<p class="lab">没有找到数据文件，请先在项目根目录运行 <code>python build.py</code>。</p>'); return; }
+
+  // 第 1 步
+  table($('#dtypes'), ['列名', 'pandas 读成的类型', '缺失数'], D.dtypes, { right: [2] });
+  spot($('#spot'), D);
+  bars($('#by-contract'), Object.entries(D.by_contract).map(([k, v]) => ({ label: k, value: v })), { f: 'pct', max: 0.5 });
+  bars($('#by-tenure'), Object.entries(D.by_tenure).map(([k, v]) => ({ label: k, value: v })), { f: 'pct', max: 0.5 });
+
+  // 第 2 步
+  table($('#clean-log'), ['发现的问题', '涉及行数'], D.clean_log, { right: [1], fmts: { 1: 'int' } });
+  bars($('#leak-wrong'), [{ label: '线下交叉验证', value: D.auc_leak, cls: 'leak' }, { label: '上线后真实', value: D.auc_leak_online, cls: 'bad' }], { f: 'f3', max: 1 });
+  bars($('#leak-right'), [{ label: '线下交叉验证', value: D.auc_clean, cls: 'good' }, { label: '上线后真实', value: D.auc_clean_online, cls: 'good' }], { f: 'f3', max: 1 });
+
+  // 第 4 步
+  bars($('#noise-wrong'), [{ label: '交叉验证准确率', value: D.noise_wrong, cls: 'leak' }, { label: '真实（抛硬币）', value: 0.5, cls: 'dim' }], { f: 'pct0', max: 1 });
+  bars($('#noise-right'), [{ label: '交叉验证准确率', value: D.noise_right, cls: 'good' }, { label: '真实（抛硬币）', value: 0.5, cls: 'dim' }], { f: 'pct0', max: 1 });
+
+  // 第 5 步
+  table($('#arena'), ['模型', '准确率', '召回率', 'AUC'], D.arena, { right: [1, 2, 3], fmts: { 1: 'pct', 2: 'pct', 3: 'f3' } });
+  bars($('#weight'), [
+    { label: '不加权·精确率', value: D.weight.None[0], cls: 'dim' }, { label: '不加权·召回率', value: D.weight.None[1] },
+    { label: '加权·精确率', value: D.weight.balanced[0], cls: 'dim' }, { label: '加权·召回率', value: D.weight.balanced[1] },
+  ], { f: 'pct', max: 1 });
+
+  // 第 6 步
+  heat($('#grid'), { rows: D.grid.lr, cols: D.grid.leaf, rowName: 'learning_rate', colName: 'max_leaf_nodes', values: D.grid.auc, f: 'f3', better: 'max',
+    onPick: (i, j) => ($('#grid-pick').innerHTML = `learning_rate=<b>${D.grid.lr[i]}</b>，max_leaf_nodes=<b>${D.grid.leaf[j]}</b>：交叉验证 AUC = <b>${fmt(D.grid.auc[i][j], 'f3')}</b>，比最优低 ${fmt(D.best_cv_auc - D.grid.auc[i][j], 'f3')}。` ) });
+  hist($('#gap'), D.gap_hist, { color: 'var(--leak)', xfmt: v => v.toFixed(2), xlabel: '汇报分 − 真实分（AUC），0 右边 = 高估', ylabel: '次数', h: 240 });
+
+  // 第 7 步：曲线
+  const names = Object.keys(D.curves), colors = ['var(--accent)', 'var(--c2)'];
+  lines($('#roc'), { x: D.grid01, xdom: [0, 1], ydom: [0, 1], h: 260, xfmt: v => v.toFixed(1), yfmt: v => v.toFixed(1), xlabel: '误报率 FPR',
+    series: names.map((n, i) => ({ name: `${n} AUC ${fmt(D.curves[n].auc, 'f3')}`, y: D.curves[n].roc, color: colors[i] })).concat([{ name: '瞎猜', y: D.grid01, color: 'var(--line)', dash: 1, width: 1.5 }]) });
+  lines($('#pr'), { x: D.grid01, xdom: [0, 1], ydom: [0, 1], h: 260, xfmt: v => v.toFixed(1), yfmt: v => v.toFixed(1), xlabel: '召回率 Recall',
+    series: names.map((n, i) => ({ name: n, y: D.curves[n].pr, color: colors[i] })).concat([{ name: '瞎猜（流失率）', y: D.grid01.map(() => D.rate_test), color: 'var(--line)', dash: 1, width: 1.5 }]) });
+
+  // 第 7 步：利润实验台
+  const y = D.y_test, p = D.proba, N = y.length, P = y.reduce((a, b) => a + b, 0);
+  const order = [...p.keys()].sort((a, b) => p[b] - p[a]);
+  $('#topn').max = N;
+  const count = pick => { let tp = 0, fp = 0; for (let i = 0; i < N; i++) if (pick[i]) (y[i] ? tp++ : fp++); return { tp, fp, fn: P - tp, tn: N - P - fp }; };
+  const byThr = t => count(p.map(v => v >= t));
+  const byTop = n => { const s = new Array(N).fill(false); order.slice(0, n).forEach(i => (s[i] = true)); return count(s); };
+  const money = (c, k) => c.tp * k.succ * k.val - (c.tp + c.fp) * k.cost;
+  const params = () => ({ val: +$('#val').value || 0, cost: +$('#cost').value || 0, succ: +$('#succ').value });
+  let mode = 't';
+  function bestThr(k) { let best = { t: 0.5, m: -Infinity }; for (let t = 0.01; t < 1; t += 0.01) { const m = money(byThr(t), k); if (m > best.m) best = { t: +t.toFixed(2), m }; } return best; }
+  function renderProfit() {
+    const k = params();
+    $('#succ-v').textContent = fmt(k.succ, 'pct0');
+    const t = +$('#thr').value, n = +$('#topn').value;
+    $('#thr-v').textContent = t.toFixed(2); $('#topn-v').textContent = n;
+    const c = mode === 't' ? byThr(t) : byTop(n);
+    const prec = c.tp + c.fp ? c.tp / (c.tp + c.fp) : 0, rec = c.tp / P;
+    $('#cm').innerHTML = `<div></div><div class="h">实际会流失</div><div class="h">实际不流失</div>
+      <div class="h">打电话</div><div class="cell tp">${c.tp}<small>抓到了（TP）</small></div><div class="cell fp">${c.fp}<small>白打了（FP）</small></div>
+      <div class="h">不打</div><div class="cell fn">${c.fn}<small>漏掉了（FN）</small></div><div class="cell tn">${c.tn}<small>本就不走（TN）</small></div>`;
+    const m = money(c, k), all = money(byThr(0), k), best = bestThr(k);
+    $('#profit-kpis').innerHTML = [['打电话人数', fmt(c.tp + c.fp, 'int'), ''], ['精确率', fmt(prec, 'pct'), ''], ['召回率', fmt(rec, 'pct'), ''], ['净收益', fmt(m, 'yuan'), m >= 0 ? 'good' : 'bad']]
+      .map(([a, b, cls]) => `<div class="kpi ${cls}"><div class="k">${a}</div><div class="v">${b}</div></div>`).join('');
+    if (mode === 't') {
+      const ts = Array.from({ length: 99 }, (_, i) => +((i + 1) / 100).toFixed(2));
+      lines($('#profit-curve'), { x: ts, h: 240, xdom: [0, 1], xfmt: v => v.toFixed(1), yfmt: v => (v / 1000).toFixed(0) + 'k', xlabel: '阈值', ylabel: '净收益（元）',
+        series: [{ name: '净收益', y: ts.map(t2 => money(byThr(t2), k)), color: 'var(--accent)' }],
+        marker: { x: t, text: `当前 ${fmt(m, 'yuan')}`, points: [{ y: m, color: 'var(--ink)' }] } });
+    } else {
+      const ns = Array.from({ length: 51 }, (_, i) => Math.round((i * N) / 50));
+      lines($('#profit-curve'), { x: ns, h: 240, xfmt: v => v, yfmt: v => (v / 1000).toFixed(0) + 'k', xlabel: '打电话人数', ylabel: '净收益（元）',
+        series: [{ name: '净收益', y: ns.map(n2 => money(byTop(n2), k)), color: 'var(--accent)' }],
+        marker: { x: n, text: `当前 ${fmt(m, 'yuan')}`, points: [{ y: m, color: 'var(--ink)' }] } });
+    }
+    $('#profit-note').innerHTML = `在当前假设下，最优阈值约为 <b>${best.t.toFixed(2)}</b>，净收益 <b>${fmt(best.m, 'yuan')}</b>；给测试集全部 ${N} 人打电话的净收益是 <b>${fmt(all, 'yuan')}</b>，什么都不做是 ¥0。`;
+  }
+  ['val', 'cost', 'succ', 'thr', 'topn'].forEach(id => ($('#' + id).oninput = renderProfit));
+  $('#mode-tabs').addEventListener('pane', e => { mode = e.detail; renderProfit(); });
+  const k0 = { val: 1200, cost: 80, succ: 0.35 }, b0 = bestThr(k0), all0 = money(byThr(0), k0);
+  $('#rep-profit').textContent = fmt(b0.m, 'yuan');
+  $('#rep-all').textContent = all0 < 0 ? `亏损 ${fmt(-all0, 'yuan')}` : `只有 ${fmt(all0, 'yuan')}`;
+
+  // 第 7 步：重要性
+  bars($('#importance'), D.importance.map(([c, m]) => ({ label: c, value: m })), { f: 'f3' });
+
+  // 第 7 步：客户模拟器（与 ml/classification.py 中 sim_predict 同一公式）
+  const S = D.sim;
+  const isInt = c => ['年龄', '在网月数', '近30天投诉次数'].includes(c);
+  $('#sim-in').innerHTML = S.num.filter(c => c !== '累计消费').map(c => {
+    const [lo, hi, med] = S.ranges[c];
+    return `<label class="field" for="in-${c}"><span>${c} <b id="v-${c}"></b></span><input type="range" id="in-${c}" data-c="${c}" min="${lo}" max="${c === '近30天投诉次数' ? 6 : hi}" step="${isInt(c) ? 1 : (hi - lo) / 100}" value="${med}"></label>`;
+  }).join('') + `<div class="field"><span>累计消费（= 月费 × 在网月数）</span><b id="v-累计消费" class="mono"></b></div>` + S.cat.map((c, k) => `<label class="field" for="in-${c}"><span>${c}</span><select id="in-${c}" data-c="${c}">${S.cats[k].map(v => `<option>${v}</option>`).join('')}</select></label>`).join('');
+  const row = () => {
+    const r = {};
+    $$('#sim-in [data-c]').forEach(el => (r[el.dataset.c] = el.tagName === 'SELECT' ? el.value : +el.value));
+    r['累计消费'] = r['月费'] * r['在网月数'];
+    return r;
+  };
+  const sig = z => 1 / (1 + Math.exp(-z));
+  function simulate() {
+    const r = row(), z = S.num.map((c, i) => ((r[c] ?? S.median[i]) - S.mean[i]) / S.scale[i]);
+    S.cat.forEach((c, k) => S.cats[k].forEach(v => z.push(r[c] === v ? 1 : 0)));
+    const logit = S.intercept + z.reduce((a, zi, i) => a + S.coef[i] * zi, 0);
+    const base = S.intercept + S.zmean.reduce((a, zi, i) => a + S.coef[i] * zi, 0);
+    const contrib = {}; let i = 0;
+    S.num.forEach(c => { contrib[c] = S.coef[i] * (z[i] - S.zmean[i]); i++; });
+    S.cat.forEach((c, k) => { contrib[c] = 0; S.cats[k].forEach(() => { contrib[c] += S.coef[i] * (z[i] - S.zmean[i]); i++; }); });
+    S.num.forEach(c => { const el = $('#v-' + c); if (el) el.textContent = c === '累计消费' ? fmt(r[c], 'yuan') : isInt(c) ? r[c] : (+r[c]).toFixed(1); });
+    const pr = sig(logit);
+    $('#sim-p').textContent = fmt(pr, 'pct'); $('#sim-base').textContent = fmt(sig(base), 'pct');
+    $('#sim-bar').style.width = pr * 100 + '%'; $('#sim-bar').style.background = pr > 0.5 ? 'var(--bad)' : pr > 0.25 ? 'var(--c2)' : 'var(--good)';
+    const items = Object.entries(contrib).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    const mx = Math.max(...items.map(t => Math.abs(t[1])), 0.1);
+    bars($('#sim-why'), items.map(([c, v]) => ({ label: c, value: Math.abs(v), cls: v > 0 ? 'bad' : 'good', text: (v > 0 ? '+' : '') + v.toFixed(2) })), { max: mx });
+  }
+  const preset = vals => { Object.entries(vals).forEach(([c, v]) => { const el = $(`#in-${c}`); if (el) el.value = v; }); simulate(); };
+  $('#p-risk').onclick = () => preset({ 年龄: 24, 在网月数: 2, 月费: 140, 近30天投诉次数: 3, 近30天使用时长: 18, 合约类型: '月付', 宽带类型: '光纤', 家庭套餐: '否', 支付方式: 'cash' });
+  $('#p-loyal').onclick = () => preset({ 年龄: 48, 在网月数: 60, 月费: 75, 近30天投诉次数: 0, 近30天使用时长: 62, 合约类型: '两年', 宽带类型: '普通', 家庭套餐: '是', 支付方式: 'auto_debit' });
+  $('#sim-in').oninput = simulate;
+  simulate();
+
+  ML.init();
+  renderProfit();
+})();
+</script>
+</body>
+</html>

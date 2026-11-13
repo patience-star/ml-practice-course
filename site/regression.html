@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>二手房一键估价 · 机器学习实战课</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="reg">
+<header class="top"><div class="top-in">
+  <a class="brand" href="index.html"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="8" width="20" height="6" rx="3" style="fill:var(--pipe)"/><circle cx="16" cy="18" r="2.6" style="fill:var(--leak)"/></svg>机器学习实战课</a>
+  <nav><a href="index.html">总览</a><a href="regression.html" aria-current="page">回归·房价</a><a href="classification.html">分类·流失</a><a href="clustering.html">聚类·分群</a></nav>
+  <span class="meter"></span>
+</div></header>
+
+<div class="wrap layout">
+<aside class="rail" id="rail" aria-label="步骤导航"></aside>
+<main>
+
+<section class="hero">
+  <span class="eyebrow">项目 A · 回归 · 星海市房产平台</span>
+  <h1>二手房一键估价：给每套房一个靠谱的参考价</h1>
+  <p class="lede"><b data-v="REG.n_raw" data-f="int"></b> 条 2022–2024 年的成交记录，来自几十家中介的录入。产品经理想在 App 上线"一键估价"。房价会涨会跌，数据又脏又乱，这个项目里时间是主角。</p>
+  <div class="facts">
+    <span>成交价中位数 <b data-v="REG.price_median" data-f="wan"></b></span><span>右偏分布</span><span>800 个小区</span><span>埋了 <b>2</b> 个泄漏字段</span>
+    <span>TimeSeriesSplit · TransformedTargetRegressor · TargetEncoder</span>
+  </div>
+</section>
+
+<!-- ============================== 0 ============================== -->
+<section class="step" id="s0" data-step="0" data-title="业务理解">
+  <header class="step-head"><span class="step-no">STEP 0</span><h2>业务理解：估价到底在"预测"什么？</h2></header>
+  <div class="npc"><div class="ava">林</div><div class="bubble"><div class="who">产品经理 · 林舟</div>用户在 App 里输入面积、小区、楼层，马上看到一个参考价。现在经纪人都是凭经验报价，"区域均价乘面积"，经常差得离谱。我们能做得更准吗？</div></div>
+  <div class="npc me"><div class="ava">你</div><div class="bubble"><div class="who">你</div>可以。先对齐三件事：估价发生在成交之前，所以只能用成交前就知道的信息；"准"要用业务能听懂的单位来衡量；还要和经纪人现在的做法比一比。</div></div>
+  <div class="tbl"><table>
+    <thead><tr><th>业务语言</th><th>机器学习语言</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>这套房值多少钱？</td><td>回归：预测连续值"成交价（万元）"</td><td>答案是一个数，不是类别</td></tr>
+      <tr><td>估价发生在什么时候？</td><td>成交之前，用历史成交预测未来成交</td><td>决定了哪些字段能用、数据怎么切分</td></tr>
+      <tr><td>怎样算估得准？</td><td>MAE（平均差多少万）+ 误差 ±10% 以内的房源占比</td><td>R² 业务方听不懂；"差多少万"人人都懂</td></tr>
+      <tr><td>比现在好多少？</td><td>基线：区域单价中位数 × 面积</td><td>这就是经纪人现在的做法</td></tr>
+    </tbody>
+  </table></div>
+  <aside class="leak" data-id="reg-time">
+    <div class="leak-head"><span class="tag">漏点 1 · 预测时点</span><h3>估价的那一刻，哪些信息还不存在？</h3><span class="seen"></span></div>
+    <div class="timeline"><div>小区建成</div><div>装修</div><div>挂牌</div><div class="now">估价时点</div><div class="after">谈价成交</div><div class="after">网签缴税</div><div class="after">过户</div></div>
+    <div class="classify">
+      <p class="hint">点选估价时还拿不到的字段（泄漏），再点"检查"。</p>
+      <div class="chips">
+        <button class="chip" data-leak="0" data-why="房子固有属性">面积</button>
+        <button class="chip" data-leak="1" data-why="成交价 ÷ 面积，成交后才知道">单价</button>
+        <button class="chip" data-leak="0" data-why="房子固有属性">小区</button>
+        <button class="chip" data-leak="1" data-why="按成交价计算的税">契税</button>
+        <button class="chip" data-leak="0" data-why="估价当天就知道">成交月份</button>
+        <button class="chip" data-leak="1" data-why="从挂牌到成交用了多久，成交后才知道">成交周期（天）</button>
+        <button class="chip" data-leak="0" data-why="房子固有属性">距地铁米</button>
+        <button class="chip" data-leak="0" data-why="挂牌信息">装修</button>
+      </div>
+      <div class="row"><button class="go primary">检查</button><span class="msg"></span></div>
+    </div>
+  </aside>
+  <div class="quiz" data-answer="1">
+    <p class="q">向产品经理汇报模型效果，最合适的指标是？</p>
+    <div class="opts"><button>R² = <span data-v="REG.test_r2" data-f="f2"></span></button><button>平均差 <span data-v="REG.test_mae" data-f="wan"></span>；<span data-v="REG.within10" data-f="pct0"></span> 的房源误差在 10% 以内</button><button>均方误差 MSE（单位：万元²）</button></div>
+    <p class="explain">MAE 带着业务单位（万元），误差 ±10% 的占比直接对应用户体验。R² 和 MSE 适合建模时比较模型，但很难让业务方产生直观感受。</p>
+  </div>
+</section>
+
+<!-- ============================== 1 ============================== -->
+<section class="step" id="s1" data-step="1" data-title="数据体检">
+  <header class="step-head"><span class="step-no">STEP 1</span><h2>数据体检：几十家中介的录入，会有多乱？</h2></header>
+  <div data-code="REG.code.load"></div>
+  <div class="kpis">
+    <div class="kpi bad"><div class="k">面积最大值（㎡）</div><div class="v" data-v="REG.area_max" data-f="int"></div></div>
+    <div class="kpi bad"><div class="k">建成年份最小值</div><div class="v" data-v="REG.year_min"></div></div>
+    <div class="kpi"><div class="k">成交价偏度</div><div class="v" data-v="REG.skew" data-f="f2"></div></div>
+    <div class="kpi"><div class="k">均价 / 中位数（万）</div><div class="v"><span data-v="REG.price_mean" data-f="int"></span> / <span data-v="REG.price_median" data-f="int"></span></div></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">找茬</span><h3>这 12 行原始数据里藏着哪些问题？（含一道陷阱题）</h3></div>
+    <div id="spot"></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">分布</span><h3>成交价：原始 vs 取对数</h3></div>
+    <div data-tabs id="hist-tabs">
+      <div class="seg"><button data-show="raw" class="on">原始价格（万元）</button><button data-show="log">log(价格)</button></div>
+      <div data-pane="raw"><div id="hist-raw"></div><p class="hint">长长的右尾：少数豪宅把均值拉到了中位数之上。偏度 <b data-v="REG.skew" data-f="f2"></b>。</p></div>
+      <div data-pane="log"><div id="hist-log"></div><p class="hint">取对数后接近对称，偏度 <b data-v="REG.skew_log" data-f="f2"></b>。第 4 步会用到这个发现。</p></div>
+    </div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">时间</span><h3>每月成交单价中位数（万元/㎡）</h3></div>
+    <div id="trend"></div>
+    <p class="hint">2023 年年中见顶，之后一路下行。记住这条曲线，它会在第 3 步和第 7 步反复出现。（"单价"不能当特征，但用来做探索分析没问题。）</p>
+  </div>
+  <div class="quiz" data-answer="2">
+    <p class="q">找茬里"距地铁米"为空的那一格，最合理的理解是？</p>
+    <div class="opts"><button>录入遗漏，应删掉这一行</button><button>用全市平均距离填上</button><button>附近没有地铁，缺失本身就是信息</button></div>
+    <p class="explain">同一个小区的房子全都缺这个值，说明不是随机遗漏。用平均距离填补，等于给没有地铁的小区"造"了一个地铁站。正确做法：填补的同时加一列"是否缺失"，让模型知道这是没地铁的房子。</p>
+  </div>
+</section>
+
+<!-- ============================== 2 ============================== -->
+<section class="step" id="s2" data-step="2" data-title="数据清洗">
+  <header class="step-head"><span class="step-no">STEP 2</span><h2>数据清洗：用业务常识修数据</h2></header>
+  <div class="why"><span class="tag">为什么</span><p class="prose">每条清洗规则背后都应该有一句业务解释：面积在 300 到 3100 之间、除以 10.764 恰好落在正常范围，说明是按平方英尺录的；9999 是系统占位符；0 年是"未填"。说不出业务理由的"异常值删除"，往往会删掉真实的豪宅或老房子。</p><p class="prose">和分类项目一样，这里只做规则型清洗，填补缺失留给 Pipeline。</p></div>
+  <div data-code="REG.code.clean"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">清洗日志</span><h3>每条规则处理了多少行</h3></div>
+    <div id="clean-log"></div>
+    <p class="hint">清洗后剩 <b data-v="REG.n_clean" data-f="int"></b> 条成交记录。</p>
+  </div>
+  <aside class="leak" data-id="reg-target">
+    <div class="leak-head"><span class="tag">漏点 2 · 目标泄漏</span><h3>"单价"和"契税"：答案换了个马甲</h3><span class="seen"></span></div>
+    <p class="prose">单价 = 成交价 ÷ 面积，契税 = 成交价 × 税率。它们都是成交之后才有的数，模型只要学会一次乘法，就能"预测"出成交价。</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">泄漏版：特征里有单价</button><button data-show="right" class="good">正确版：删掉单价、契税</button></div>
+      <div data-pane="wrong"><div id="leak-wrong"></div><p class="prose"><span class="verdict bad">R² = <b data-v="REG.r2_leak" data-f="f3"></b>，几乎完美，但毫无用处。</span>用户来估价时，根本不知道单价。上线后这一列为空，模型直接失效。</p></div>
+      <div data-pane="right"><div id="leak-right"></div><p class="prose"><span class="verdict good">R² = <b data-v="REG.r2_clean" data-f="f3"></b>。</span>这才是只用估价时可得信息能达到的真实水平。</p></div>
+    </div>
+    <div data-code="REG.code.leak_demo"></div>
+  </aside>
+  <div class="pit"><h3>常见坑</h3><ul>
+    <li>看到面积 2000 ㎡ 直接删除：其实是单位错误，换算回来就是一条有效数据。</li>
+    <li>"东湖"和"东湖区"被当成两个区：独热编码后变成两列，样本被拆散。</li>
+    <li>只按房源编号去重：两个中介挂同一套房，编号不同、内容相同。</li>
+  </ul></div>
+  <div class="quiz" data-answer="0">
+    <p class="q">一个特征让 R² 从 <span data-v="REG.r2_clean" data-f="f2"></span> 跳到 <span data-v="REG.r2_leak" data-f="f2"></span>，你的第一反应应该是？</p>
+    <div class="opts"><button>先查它是什么时候产生的、是不是由目标算出来的</button><button>太好了，赶紧上线</button><button>再多加几个类似的特征</button></div>
+    <p class="explain">好得不像真的，通常就不是真的。先查来源和产生时间，确认它在预测时点确实可得。</p>
+  </div>
+</section>
+
+<!-- ============================== 3 ============================== -->
+<section class="step" id="s3" data-step="3" data-title="数据切分">
+  <header class="step-head"><span class="step-no">STEP 3</span><h2>数据切分：用过去预测未来</h2></header>
+  <div class="why"><span class="tag">为什么</span><p class="prose">估价模型上线后，面对的永远是"比训练数据更晚"的成交。所以测试集应该是时间上最后的一段：2024 年下半年。这样测出来的分数，才是在模拟真实处境。交叉验证也一样，用 <code>TimeSeriesSplit</code>，每一折都只用更早的数据去预测更晚的。</p></div>
+  <div data-code="REG.code.split"></div>
+  <div class="kpis">
+    <div class="kpi"><div class="k">训练集（2022-01 ～ 2024-06）</div><div class="v" data-v="REG.n_train" data-f="int"></div></div>
+    <div class="kpi"><div class="k">测试集（2024-07 ～ 12，封存）</div><div class="v" data-v="REG.n_test" data-f="int"></div></div>
+  </div>
+  <aside class="leak" data-id="reg-dup">
+    <div class="leak-head"><span class="tag">漏点 3 · 重复样本</span><h3>考试题提前出现在了练习册里</h3><span class="seen"></span></div>
+    <p class="prose">同一套房被两个中介重复挂牌。如果不去重就随机切分，一套房可能一份在训练集、一份在测试集。模型在测试集上遇到它时，其实是在"背答案"。</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">不去重 + 随机切分</button><button data-show="right" class="good">先去重</button></div>
+      <div data-pane="wrong"><div id="dup-bars"></div><p class="prose"><span class="verdict bad">测试集里 <b data-v="REG.dup_twin_share" data-f="pct0"></b> 的房子，训练集里有一模一样的"双胞胎"。</span>这些房子的误差只有 <b data-v="REG.dup_mae_twin" data-f="wan"></b>，其余是 <b data-v="REG.dup_mae_other" data-f="wan"></b>。重复越多，整体分数虚高越严重。</p></div>
+      <div data-pane="right"><p class="prose"><span class="verdict good">我们的做法：</span><code>clean()</code> 第一步就按"除编号外全部相同"去重。更一般的情况（同一个客户的多条记录、同一套房的多次成交）要用 <code>GroupKFold</code>，保证同一组只出现在一边。</p></div>
+    </div>
+    <div data-code="REG.code.dup_demo"></div>
+  </aside>
+  <aside class="leak" data-id="reg-split">
+    <div class="leak-head"><span class="tag">漏点 4 · 时间穿越</span><h3>随机切分，让模型提前看到了房价走势</h3><span class="seen"></span></div>
+    <p class="prose">在训练期内部做个对照实验：同一个模型、同样大小的验证集，只是切分方式不同。真正的测试集继续封存。</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">随机切分</button><button data-show="right" class="good">按时间切分</button></div>
+      <div data-pane="wrong"><div class="kpis"><div class="kpi"><div class="k">平均百分比误差</div><div class="v" data-v="REG.mape_random" data-f="pct"></div></div><div class="kpi"><div class="k">系统性偏差</div><div class="v" data-v="REG.bias_random" data-f="spct"></div></div></div>
+        <p class="prose"><span class="verdict bad">看起来很好，而且几乎没有偏差。</span>因为训练集里混着验证期前后的成交，模型知道每个月的行情。</p></div>
+      <div data-pane="right"><div class="kpis"><div class="kpi bad"><div class="k">平均百分比误差</div><div class="v" data-v="REG.mape_time" data-f="pct"></div></div><div class="kpi bad"><div class="k">系统性偏差</div><div class="v" data-v="REG.bias_time" data-f="spct"></div></div></div>
+        <p class="prose"><span class="verdict good">这才是上线后的真实处境。</span>在下跌的市场里，模型只见过更早、更贵的成交，于是系统性高估 <b data-v="REG.bias_time" data-f="pct"></b>。随机切分把这个问题完全掩盖了，而它恰恰是对用户伤害最大的问题。</p></div>
+    </div>
+    <div data-code="REG.code.time_demo"></div>
+  </aside>
+  <div class="quiz" data-answer="1">
+    <p class="q">下面哪种数据最需要按时间切分？</p>
+    <div class="opts"><button>识别图片里是猫还是狗</button><button>预测下个季度的房价或销量</button><button>根据花瓣长度判断鸢尾花品种</button></div>
+    <p class="explain">只要模型上线后面对的是"未来"，并且数据有时间趋势，就应该按时间切分。图片分类这类不随时间变化的任务，随机切分没问题。</p>
+  </div>
+</section>
+
+<!-- ============================== 4 ============================== -->
+<section class="step" id="s4" data-step="4" data-title="预处理 Pipeline">
+  <header class="step-head"><span class="step-no">STEP 4</span><h2>特征与预处理：四种列，四种处理</h2></header>
+  <div data-code="REG.code.prep"></div>
+  <div class="tbl"><table>
+    <thead><tr><th>列</th><th>处理</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>面积</td><td>填补 → 取 log → 标准化</td><td>价格大致与面积成正比，log 后变成加法关系</td></tr>
+      <tr><td>室、厅、年份、距地铁…</td><td>中位数填补 + 缺失指示列 → 标准化</td><td>"没地铁"变成一个模型看得见的特征</td></tr>
+      <tr><td>区域、楼层、装修、学区</td><td>独热编码</td><td>类别少，独热最直接</td></tr>
+      <tr><td>小区（800 个）</td><td>目标编码 <code>TargetEncoder</code></td><td>独热会生成 800 列且大多只有几个样本；目标编码把每个小区变成"该小区的平均 log 价格"</td></tr>
+      <tr><td>目标：成交价</td><td><code>TransformedTargetRegressor</code> 取 log</td><td>房价是乘法结构（面积 × 单价 × 系数），而且右偏；预测时自动还原成万元</td></tr>
+    </tbody>
+  </table></div>
+  <aside class="leak" data-id="reg-te">
+    <div class="leak-head"><span class="tag">漏点 5 · 目标编码</span><h3>小区均价：最容易"顺手"泄漏的特征</h3><span class="seen"></span></div>
+    <p class="prose">直觉做法是用 <code>groupby("小区").mean()</code> 算出每个小区的平均价格当特征。问题在于：一个小区只有几套成交，算均价时<b>把这一套自己的价格也算进去了</b>，评估时还用上了验证期的价格。<code>TargetEncoder</code> 在训练时做内部交叉拟合：每个样本的编码只用其他折的数据算，样本看不到自己的答案。</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">朴素均值编码</button><button data-show="right" class="good">TargetEncoder 进 Pipeline</button></div>
+      <div data-pane="wrong"><div id="te-wrong"></div><p class="prose"><span class="verdict bad">验证期误差更低，但这是借来的。</span>到了 2025 年真实上线，优势荡然无存。</p></div>
+      <div data-pane="right"><div id="te-right"></div><p class="prose"><span class="verdict good">线下分数没那么好看，却和上线表现对得上。</span>评估诚实，决策才不会被误导。</p></div>
+    </div>
+    <div data-code="REG.code.te_demo"></div>
+  </aside>
+  <div class="quiz" data-answer="2">
+    <p class="q">为什么要在 log(价格) 上训练，而不是直接预测价格？</p>
+    <div class="opts"><button>log 后数字变小，计算更快</button><button>sklearn 要求目标必须是正态分布</button><button>房价是乘法结构且右偏，log 后线性模型更好拟合，误差也不会被少数豪宅主导</button></div>
+    <p class="explain">"学区房贵 15%"是乘法关系，log 之后变成"加 0.14"，线性模型正好能表达。第 5 步的擂台会给出实测对比。</p>
+  </div>
+</section>
+
+<!-- ============================== 5 ============================== -->
+<section class="step" id="s5" data-step="5" data-title="建模与复杂度">
+  <header class="step-head"><span class="step-no">STEP 5</span><h2>建模：从"猜中位数"到梯度提升</h2></header>
+  <div class="guess" data-v="REG.arena.0.1" data-f="wan" data-gf="wan">
+    <p class="q">先猜：一个永远报"中位数价格"的模型，平均差多少万？</p>
+    <div class="row"><input type="range" min="0" max="200" step="1" value="40" aria-label="你猜的误差"><output></output><button class="go primary">揭晓</button></div>
+    <div class="reveal"><p>真实结果：<span class="big truth"></span></p><p class="diff"></p><p class="prose">这就是"什么都没学"的水平。下面的每个模型都要和它比。</p></div>
+  </div>
+  <div data-code="REG.code.model"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">模型擂台</span><h3>时间序列交叉验证 MAE（万元，越短越好）</h3></div>
+    <div id="arena"></div>
+    <p class="hint">同一个 Ridge，换成在 log 价格上训练，误差明显下降；梯度提升和 log-Ridge 不相上下。简单模型 + 对的特征处理，常常和复杂模型一样好。</p>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">实验</span><h3>拖动决策树深度，看欠拟合和过拟合</h3></div>
+    <div data-code="REG.code.depth"></div>
+    <label class="field" for="depth"><span>max_depth = <b id="depth-v"></b></span><input type="range" id="depth" min="1" max="20" step="1" value="3"></label>
+    <div id="depth-chart"></div>
+    <p id="depth-note" class="prose"></p>
+  </div>
+  <div class="quiz" data-answer="0">
+    <p class="q">训练误差一直在下降，验证误差却开始上升，说明？</p>
+    <div class="opts"><button>模型开始过拟合：在背训练集的噪声</button><button>模型欠拟合，应该继续加深</button><button>数据有泄漏</button></div>
+    <p class="explain">验证误差最低点就是复杂度的甜蜜点。再往后，模型记住的是训练数据里的偶然性，而不是规律。</p>
+  </div>
+</section>
+
+<!-- ============================== 6 ============================== -->
+<section class="step" id="s6" data-step="6" data-title="调参与验收">
+  <header class="step-head"><span class="step-no">STEP 6</span><h2>调参与验收：打开封存的测试集</h2></header>
+  <div data-code="REG.code.tune"></div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">调参网格</span><h3>HistGB 时间序列交叉验证 MAE（万元，点格子查看）</h3></div>
+    <div id="grid"></div>
+    <p class="hint" id="grid-pick">黑框是最优组合，MAE = <b data-v="REG.best_cv_mae" data-f="wan"></b>。</p>
+  </div>
+  <div data-code="REG.code.final"></div>
+  <div class="kpis">
+    <div class="kpi good"><div class="k">测试集 MAE</div><div class="v" data-v="REG.test_mae" data-f="wan"></div></div>
+    <div class="kpi good"><div class="k">误差 ≤10% 的房源</div><div class="v" data-v="REG.within10" data-f="pct"></div></div>
+    <div class="kpi"><div class="k">经纪人规则 MAE</div><div class="v" data-v="REG.rule_mae" data-f="wan"></div></div>
+    <div class="kpi"><div class="k">经纪人规则 ≤10%</div><div class="v" data-v="REG.rule_within10" data-f="pct"></div></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">业务验收</span><h3>放宽或收紧"估得准"的标准</h3></div>
+    <label class="field" for="tol"><span>误差在 ±<b id="tol-v"></b> 以内算估得准</span><input type="range" id="tol" min="0.02" max="0.3" step="0.01" value="0.1"></label>
+    <div id="tol-bars"></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">误差分析</span><h3>预测 vs 真实，以及各区的误差</h3></div>
+    <div class="split"><div><p class="hint">点越靠近虚线越准（万元）</p><div id="scatter"></div></div><div><p class="hint">各区平均误差（万元）</p><div id="by-district"></div></div></div>
+    <p class="hint">误差分析是为了找下一步改进的方向：哪个区估得差？贵的房子是不是普遍低估？</p>
+  </div>
+  <div class="quiz" data-answer="1">
+    <p class="q">测试集 MAE 比交叉验证 MAE 还低一些，可能的原因是？</p>
+    <div class="opts"><button>测试集泄漏了</button><button>时间序列交叉验证的早期折训练数据很少，拉高了平均误差</button><button>模型在测试集上过拟合</button></div>
+    <p class="explain"><code>TimeSeriesSplit</code> 第一折只用最早的六分之一数据训练，误差偏大；最终模型用全部训练期数据训练。两者有差距很正常，只要测试集只用了一次。</p>
+  </div>
+</section>
+
+<!-- ============================== 7 ============================== -->
+<section class="step" id="s7" data-step="7" data-title="解释与上线">
+  <header class="step-head"><span class="step-no">STEP 7</span><h2>解释与上线：模型会过期</h2></header>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">解释</span><h3>置换重要性：打乱一列，误差涨多少（万元）</h3></div>
+    <div data-code="REG.code.explain"></div>
+    <div id="importance"></div>
+  </div>
+  <div class="lab">
+    <div class="lab-title"><span class="tag">估价器</span><h3>试试给一套房估价（2024 年 6 月行情）</h3></div>
+    <div class="fields" id="est-in"></div>
+    <div class="split">
+      <div><p class="hint">估价</p><p class="big" id="est-p"></p><p class="hint" id="est-unit"></p></div>
+      <div><p class="hint">与"平均房子"相比，各因素把价格乘以多少</p><div id="est-why"></div></div>
+    </div>
+    <p class="hint">估价器用的是可解释的 log-Ridge（测试集 MAE <b data-v="REG.lin_test_mae" data-f="wan"></b>），网页用导出的系数复现了 sklearn 的计算；线上主模型是 HistGB（MAE <b data-v="REG.test_mae" data-f="wan"></b>）。</p>
+  </div>
+  <div data-code="REG.code.deploy"></div>
+  <aside class="leak" data-id="reg-decay">
+    <div class="leak-head"><span class="tag">漏点 6 · 训练与线上脱节</span><h3>用旧行情训练的模型，在新行情里会系统性高估</h3><span class="seen"></span></div>
+    <p class="prose">验收完成后，测试期（2024 下半年）的数据就不必再封存了。它是离上线最近、最有价值的行情。下面是 2025 年一季度 <b data-v="REG.n_new" data-f="int"></b> 笔真实成交上的表现：</p>
+    <div data-tabs>
+      <div class="seg"><button data-show="wrong" class="bad">直接上线（数据只到 2024-06）</button><button data-show="right" class="good">用全部数据重训后上线</button></div>
+      <div data-pane="wrong"><div class="kpis"><div class="kpi bad"><div class="k">误差 ≤10% 的房源</div><div class="v" data-v="REG.new_within10" data-f="pct"></div></div><div class="kpi bad"><div class="k">系统性偏差</div><div class="v" data-v="REG.new_bias" data-f="spct"></div></div></div><p class="prose"><span class="verdict bad">平均高估 <b data-v="REG.new_bias" data-f="pct0"></b>。</span>市场还在下跌，模型却停在了半年前。</p></div>
+      <div data-pane="right"><div class="kpis"><div class="kpi good"><div class="k">误差 ≤10% 的房源</div><div class="v" data-v="REG.refit_within10" data-f="pct"></div></div><div class="kpi good"><div class="k">系统性偏差</div><div class="v" data-v="REG.refit_bias" data-f="spct"></div></div></div><p class="prose"><span class="verdict good">重训后恢复正常。</span>此后还要每月监控"预测值 / 成交价"的偏差，一旦持续偏离就触发重训。</p></div>
+    </div>
+  </aside>
+
+  <div class="lab">
+    <div class="lab-title"><span class="tag">向老板汇报</span><h3>勾选你会放进汇报里的结论</h3></div>
+    <div class="report">
+      <div class="list">
+        <label data-good="1"><input type="checkbox"><span>2024 下半年的房子，模型平均差 <b data-v="REG.test_mae" data-f="wan"></b>，<b data-v="REG.within10" data-f="pct0"></b> 的房源误差在 10% 以内；经纪人规则只有 <b data-v="REG.rule_within10" data-f="pct0"></b>。<span class="fb">好。业务单位 + 和现状对比。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>加入"单价"后 R² 达到 <b data-v="REG.r2_leak" data-f="f2"></b>，建议上线这个版本。<span class="fb">错。单价是成交后才有的泄漏字段。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>市场下行时模型会滞后，必须用最新成交重训，并每月监控估价偏差。<span class="fb">好。说清了模型的边界和运维要求。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>模型已经很准，以后不需要再维护了。<span class="fb">错。2025 年一季度的实验已经证明，不重训会平均高估 <b data-v="REG.new_bias" data-f="pct0"></b>。</span></span></label>
+        <label data-good="1"><input type="checkbox"><span>面积、小区、区域是估价最依赖的信息；豪宅和成交很少的小区误差较大，页面上应展示估价区间而不是单个数字。<span class="fb">好。把误差分析转化成了产品建议。</span></span></label>
+        <label data-good="0"><input type="checkbox"><span>模型发现学区房能让房价上涨 15%，建议业主去争取学区。<span class="fb">错。这是相关，不是因果；而且业主无法"争取"学区。</span></span></label>
+      </div>
+      <div class="row"><button class="go primary">提交汇报</button><span class="msg"></span></div>
+    </div>
+  </div>
+  <div class="quiz" data-answer="1">
+    <p class="q">测试集验收通过后，上线的模型应该用哪些数据训练？</p>
+    <div class="opts"><button>只用训练集，保持和验收时一模一样</button><button>训练集 + 测试集全部数据，用验收时确定的流程和参数</button><button>只用最近三个月的数据</button></div>
+    <p class="explain">验收评估的是"这套流程"的好坏。流程确定后，用全部数据重训，模型能学到最新行情。上面的漏点 6 用数字说明了这一点。</p>
+  </div>
+  <div class="why"><span class="tag">复盘清单</span><ul class="prose">
+    <li>估价 = 用过去预测未来：按时间切分，用 TimeSeriesSplit 交叉验证。</li>
+    <li>单价、契税是目标泄漏；重复挂牌要先去重；小区均价要用 TargetEncoder。</li>
+    <li>业务常识修数据：单位换算、占位符、有含义的缺失。</li>
+    <li>log 目标 + log 面积，让乘法结构变成加法。</li>
+    <li>用业务单位验收：平均差多少万、±10% 的比例，并和现行规则比较。</li>
+    <li>验收后用全部数据重训，上线后监控偏差。</li>
+  </ul>
+  <p class="prose" style="margin-top:10px"><b>课后作业：</b>下载 <a href="data/house.csv">house.csv</a> 和 <a href="data/house_2025q1.csv">house_2025q1.csv</a>，试着加入"房龄"、"楼层比例"等特征，看能否把 ±10% 的比例再提高。记得只用训练期数据做决定。</p></div>
+</section>
+
+</main>
+</div>
+
+<script src="assets/app.js"></script>
+<script src="data/regression.js"></script>
+<script>
+(() => {
+  const { $, $$, fmt, bars, table, lines, hist, heat, spot, scatter } = ML;
+  const D = window.REG;
+  if (!D) { document.querySelector('main').insertAdjacentHTML('afterbegin', '<p class="lab">没有找到数据文件，请先在项目根目录运行 <code>python build.py</code>。</p>'); return; }
+
+  // 第 1 步
+  spot($('#spot'), D);
+  hist($('#hist-raw'), D.hist_raw, { xfmt: v => v.toFixed(0), xlabel: '成交价（万元）', ylabel: '套数', h: 230 });
+  hist($('#hist-log'), D.hist_log, { xfmt: v => v.toFixed(1), xlabel: 'log(成交价)', ylabel: '套数', h: 230, color: 'var(--c3)' });
+  const mi = D.trend.month.map((_, i) => i);
+  lines($('#trend'), { x: mi, h: 240, xfmt: i => D.trend.month[Math.round(i)] || '', yfmt: v => v.toFixed(2), ylabel: '万元/㎡', xt: mi.filter(i => i % 6 === 0),
+    series: [{ name: '单价中位数', y: D.trend.unit, color: 'var(--accent)', dots: false }],
+    marker: { x: D.trend.month.indexOf('2024-07') - 0.5, text: '测试集从这里开始' } });
+
+  // 第 2 步
+  table($('#clean-log'), ['发现的问题', '涉及行数'], D.clean_log, { right: [1], fmts: { 1: 'int' } });
+  bars($('#leak-wrong'), [{ label: 'R²（含单价）', value: D.r2_leak, cls: 'leak' }], { f: 'f3', max: 1 });
+  bars($('#leak-right'), [{ label: 'R²（不含）', value: D.r2_clean, cls: 'good' }], { f: 'f3', max: 1 });
+
+  // 第 3 步
+  bars($('#dup-bars'), [{ label: '有双胞胎的房子', value: D.dup_mae_twin, cls: 'leak' }, { label: '其他房子', value: D.dup_mae_other, cls: 'dim' }], { f: 'wan' });
+
+  // 第 4 步
+  const teMax = Math.max(D.te.naive, D.te.honest, D.te.naive_new, D.te.honest_new);
+  bars($('#te-wrong'), [{ label: '验证期 MAE', value: D.te.naive, cls: 'leak' }, { label: '2025 上线 MAE', value: D.te.naive_new, cls: 'bad' }], { f: 'wan', max: teMax });
+  bars($('#te-right'), [{ label: '验证期 MAE', value: D.te.honest, cls: 'good' }, { label: '2025 上线 MAE', value: D.te.honest_new, cls: 'good' }], { f: 'wan', max: teMax });
+
+  // 第 5 步
+  const best = Math.min(...D.arena.map(a => a[1]));
+  bars($('#arena'), D.arena.map(([n, v]) => ({ label: n, value: v, cls: v === best ? 'good' : n.startsWith('Dummy') ? 'dim' : '' })), { f: 'wan' });
+  const depth = () => {
+    const d = +$('#depth').value, i = d - 1, tr = D.depth.train[i], va = D.depth.val[i];
+    $('#depth-v').textContent = d;
+    lines($('#depth-chart'), { x: D.depth.d, h: 240, xlabel: 'max_depth', ylabel: 'MAE（万元）', yfmt: v => v.toFixed(0), xfmt: v => v,
+      series: [{ name: '训练误差', y: D.depth.train, color: 'var(--c2)' }, { name: '验证误差', y: D.depth.val, color: 'var(--accent)' }],
+      marker: { x: d, points: [{ y: tr, color: 'var(--c2)' }, { y: va, color: 'var(--accent)' }] } });
+    const state = d < D.best_depth - 1 ? ['欠拟合', '模型太简单，训练误差和验证误差都很高'] : d > D.best_depth + 2 ? ['过拟合', '训练误差还在下降，验证误差却在上升：模型在背噪声'] : ['刚刚好', `验证误差最低点在深度 ${D.best_depth} 附近`];
+    $('#depth-note').innerHTML = `深度 <b>${d}</b>：训练误差 <b>${fmt(tr, 'wan')}</b>，验证误差 <b>${fmt(va, 'wan')}</b>。<span class="verdict">${state[0]}</span>：${state[1]}。`;
+  };
+  $('#depth').oninput = depth; depth();
+
+  // 第 6 步
+  heat($('#grid'), { rows: D.grid.lr, cols: D.grid.leaf, rowName: 'learning_rate', colName: 'max_leaf_nodes', values: D.grid.mae, f: 'f1', better: 'min',
+    onPick: (i, j) => ($('#grid-pick').innerHTML = `learning_rate=<b>${D.grid.lr[i]}</b>，max_leaf_nodes=<b>${D.grid.leaf[j]}</b>：MAE = <b>${fmt(D.grid.mae[i][j], 'wan')}</b>，比最优多 ${fmt(D.grid.mae[i][j] - D.best_cv_mae, 'f1')} 万。`) });
+  const within = (pred, tol) => pred.reduce((a, p, i) => a + (Math.abs(p / D.y_test[i] - 1) <= tol), 0) / pred.length;
+  const tol = () => {
+    const t = +$('#tol').value; $('#tol-v').textContent = fmt(t, 'pct0');
+    bars($('#tol-bars'), [{ label: '模型', value: within(D.pred, t), cls: 'good' }, { label: '经纪人规则', value: within(D.rule, t), cls: 'dim' }], { f: 'pct', max: 1 });
+  };
+  $('#tol').oninput = tol; tol();
+  const top = Math.max(...D.y_test, ...D.pred) * 1.02;
+  scatter($('#scatter'), { pts: D.y_test.map((v, i) => [v, D.pred[i], 0]), colors: ['var(--accent)'], xdom: [0, top], ydom: [0, top], diag: true, r: 2.5, h: 280, xlabel: '真实成交价', yfmt: v => v.toFixed(0), xfmt: v => v.toFixed(0) });
+  const dist = {};
+  D.district_test.forEach((d, i) => { (dist[d] ||= []).push(Math.abs(D.pred[i] - D.y_test[i])); });
+  bars($('#by-district'), Object.entries(dist).map(([d, e]) => ({ label: `${d}（${e.length}）`, value: e.reduce((a, b) => a + b, 0) / e.length })).sort((a, b) => b.value - a.value), { f: 'wan' });
+
+  // 第 7 步
+  bars($('#importance'), D.importance.map(([c, v]) => ({ label: c, value: Math.max(v, 0) })), { f: 'f1' });
+
+  // 估价器（与 ml/regression.py 中 sim_predict 同一公式）
+  const S = D.sim, comms = Object.keys(S.info), DIST = S.cats[S.cat.indexOf('区域')];
+  const sel = (id, opts, val) => `<label class="field" for="e-${id}"><span>${id}</span><select id="e-${id}">${opts.map(o => `<option${o == val ? ' selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  const rng = (id, lo, hi, step, val) => `<label class="field" for="e-${id}"><span>${id} <b id="ev-${id}"></b></span><input type="range" id="e-${id}" min="${lo}" max="${hi}" step="${step}" value="${val}"></label>`;
+  $('#est-in').innerHTML = sel('区域', DIST, '东湖区') + `<label class="field" for="e-小区"><span>小区</span><select id="e-小区"></select></label>` +
+    rng('面积', 30, 250, 1, 89) + rng('室', 1, 5, 1, 3) + rng('厅', 1, 2, 1, 2) + sel('楼层', ['低', '中', '高'], '中') + sel('总楼层', [6, 7, 11, 18, 26, 33], 18) +
+    rng('建成年份', 1990, 2023, 1, 2010) + sel('装修', ['毛坯', '简装', '精装'], '简装') + rng('距地铁米', 100, 3000, 50, 800) +
+    `<label class="field" for="e-nosub"><span>附近无地铁</span><input type="checkbox" id="e-nosub"></label>` + sel('学区房', ['否', '是'], '否');
+  const fillComms = () => {
+    const d = $('#e-区域').value, list = comms.filter(c => S.info[c][0] === d);
+    $('#e-小区').innerHTML = list.map(c => `<option>${c}</option>`).join('');
+    syncComm();
+  };
+  const syncComm = () => {
+    const [, sub, sch] = S.info[$('#e-小区').value] || [];
+    $('#e-nosub').checked = sub == null; if (sub != null) $('#e-距地铁米').value = sub;
+    $('#e-学区房').value = sch || '否';
+  };
+  function estimate() {
+    const v = id => $('#e-' + id).value;
+    const row = { 面积: +v('面积'), 室: +v('室'), 厅: +v('厅'), 总楼层: +v('总楼层'), 建成年份: +v('建成年份'), 距地铁米: $('#e-nosub').checked ? null : +v('距地铁米'), 成交月: S.month,
+      区域: v('区域'), 楼层: v('楼层'), 装修: v('装修'), 学区房: v('学区房'), 小区: v('小区') };
+    ['面积', '室', '厅', '建成年份', '距地铁米'].forEach(k => ($('#ev-' + k).textContent = k === '距地铁米' && row[k] == null ? '—' : row[k]));
+    const z = [(Math.log(row.面积) - S.area[1]) / S.area[2]], groups = ['面积'];
+    const vals = S.num.map((c, i) => (row[c] == null ? S.median[i] : row[c]));
+    S.ind.forEach(i => vals.push(row[S.num[i]] == null ? 1 : 0));
+    vals.forEach((x, i) => { z.push((x - S.mean[i]) / S.scale[i]); groups.push(i < S.num.length ? S.num[i] : S.num[S.ind[i - S.num.length]]); });
+    S.cat.forEach((c, k) => S.cats[k].forEach(o => { z.push(row[c] === o ? 1 : 0); groups.push(c); }));
+    z.push(S.comm[row.小区] ?? S.comm_default); groups.push('小区');
+    const logp = S.intercept + z.reduce((a, zi, i) => a + S.coef[i] * zi, 0);
+    const contrib = {};
+    z.forEach((zi, i) => { contrib[groups[i]] = (contrib[groups[i]] || 0) + S.coef[i] * (zi - S.zmean[i]); });
+    delete contrib['成交月'];
+    const price = Math.exp(logp);
+    $('#est-p').textContent = fmt(price, 'wan');
+    $('#est-unit').textContent = `约 ${(price / row.面积).toFixed(2)} 万元/㎡`;
+    const items = Object.entries(contrib).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 8);
+    const mx = Math.max(...items.map(t => Math.abs(t[1])), 0.05);
+    bars($('#est-why'), items.map(([c, x]) => ({ label: c, value: Math.abs(x), cls: x > 0 ? 'good' : 'bad', text: '×' + Math.exp(x).toFixed(2) })), { max: mx });
+  }
+  $('#e-区域').onchange = () => { fillComms(); estimate(); };
+  $('#e-小区').onchange = () => { syncComm(); estimate(); };
+  $('#est-in').oninput = estimate;
+  fillComms(); estimate();
+
+  ML.init();
+})();
+</script>
+</body>
+</html>
